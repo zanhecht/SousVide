@@ -10,7 +10,6 @@ SB5	SB4
 #include <TM1638.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
-#include <PID_v1.h>
 #include <stdio.h>
 
 // Data wire is plugged into port 2 on the Arduino
@@ -34,8 +33,15 @@ SB5	SB4
 //PWM Period in milliseconds
 #define WINDOW_SIZE 8000
 
+// PID Control Loop Time in milliseconds
+#define PID_TIME 1000
+
+// PID Gain (Kp)
+#define PID_GAIN 5
+
 //Program Parameters
 unsigned long tempTime = TEMP_TIME; //how often to check the thermometer
+unsigned long pidTime = PID_TIME; //how often to check the thermometer
 
 // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
 OneWire oneWire(ONE_WIRE_BUS);
@@ -48,9 +54,7 @@ DeviceAddress tempDeviceAddress;
 TM1638 module(8, 9, 7); 
 
 //Define Variables we'll be connecting to
-double Setpoint, Input, Output, cSetpoint, cInput;
-//Specify the links and initial tuning parameters
-PID myPID(&Input, &Output, &Setpoint,794.15,0.63,0,DIRECT);
+double Setpoint, Input, Output, cSetpoint, cInput, p, i, d, Error, oError, oOutput;
 
 unsigned long serialTime; //this will help us know when to talk with processing
 unsigned long windowStartTime; //PWM Window start time
@@ -66,22 +70,27 @@ void setup() {
   windowStartTime = millis();
   
   // Initialize Variables
-  Input = 10;
   Setpoint = INITIAL_SET_POINT;
   Output = 0;
+  oOutput = 0;
+  p = PID_GAIN;
     
   //Start Dallas Library
   sensors.begin();
   sensors.getAddress(tempDeviceAddress, 0);
   sensors.setResolution(tempDeviceAddress, SENSOR_RESOLUTION);
   sensors.setWaitForConversion(false);  // async mode
+  
+  //Get initial temperatures
   sensors.requestTemperatures();  // Send the command to get temperatures
-  
-  //Initialize PID
-  myPID.SetOutputLimits(0, WINDOW_SIZE); //tell the PID to range between 0 and the full window size
-  myPID.SetSampleTime(1000); //set sample time in milliseconds 
-  myPID.SetMode(AUTOMATIC); //Turn PID on
-  
+  delay(TEMP_TIME);
+  cInput = sensors.getTempCByIndex(0);
+  Input = sensors.toFahrenheit(cInput);
+  sensors.requestTemperatures(); // Send the command to get temperatures
+  tempTime+=TEMP_TIME;
+  Error = Setpoint - Input;
+  oError = Error;
+      
   //turn on display to brightness 1 (0-7)
   module.setupDisplay(true, 0);
   
@@ -103,12 +112,29 @@ void loop() {
     tempTime+=TEMP_TIME;
     Serial.print("Temperature: ");
     Serial.println(cInput);
-    Serial.print("Output: ");
-    Serial.println(Output);
   }
   
-  // Call PID Function. Most of the time it will just return without doing anything. At a frequency specified by SetSampleTime it will calculate a new Output. 
-  myPID.Compute();
+  // Take Back Half Function (TBH)
+  if(millis()>pidTime)
+  {
+    Error = Setpoint - Input;
+    // Detect zero crossing
+    if((oError<0 && Error>=0) || (Error<0 && oError>=0))
+    {
+      Output = (Output + oOutput)/2;
+      oOutput = Output;
+      Serial.println("ZERO CROSSING!");
+    }
+    else Output = Output + p*(Error);  //Compute new output
+    //Set Output Bounds
+    if(Output>WINDOW_SIZE) Output = WINDOW_SIZE;
+    if(Output<0) Output = 0;
+    //Watch for next zero crossing
+    oError = Error;
+    pidTime+=PID_TIME;
+    Serial.print("Output: ");
+    Serial.println(Output);
+  } 
   
   /*
   // display Fahrenheit formatted temperatures
@@ -126,7 +152,6 @@ void loop() {
   
   // Calculate output mapping to LEDs
   ledBar = (1 << (char)((Output/1000) +0.5)) - 1;
-
 
   //delay to keep wait between button checks
   delay(125);
@@ -222,17 +247,17 @@ void SerialReceive()
       Output=double(foo.asFloat[2]);      //   output blip, then the controller will 
     }                                     //   overwrite.
     
-    double p, i, d;                       // * read in and set the controller tunings
+    //double p, i, d;                       // * read in and set the controller tunings
     p = double(foo.asFloat[3]);           //
     i = double(foo.asFloat[4]);           //
     d = double(foo.asFloat[5]);           //
-    myPID.SetTunings(p, i, d);            //
+    //myPID.SetTunings(p, i, d);            //
     
-    if(Auto_Man==0) myPID.SetMode(MANUAL);// * set the controller mode
-    else myPID.SetMode(AUTOMATIC);             //
+    //if(Auto_Man==0) myPID.SetMode(MANUAL);// * set the controller mode
+    //else myPID.SetMode(AUTOMATIC);             //
     
-    if(Direct_Reverse==0) myPID.SetControllerDirection(DIRECT);// * set the controller Direction
-    else myPID.SetControllerDirection(REVERSE);          //
+    //if(Direct_Reverse==0) myPID.SetControllerDirection(DIRECT);// * set the controller Direction
+    //else myPID.SetControllerDirection(REVERSE);          //
   }
   Serial.flush();                         // * clear any random data from the serial buffer
 }
@@ -250,17 +275,22 @@ void SerialSend()
   Serial.print(" ");
   Serial.print(Output);   
   Serial.print(" ");
-  Serial.print(myPID.GetKp());   
+  //Serial.print(myPID.GetKp());
+  Serial.print(p); //TBH
   Serial.print(" ");
-  Serial.print(myPID.GetKi());   
+  //Serial.print(myPID.GetKi());   
+  Serial.print(i); //TBH
   Serial.print(" ");
-  Serial.print(myPID.GetKd());   
+  //Serial.print(myPID.GetKd());   
+  Serial.print(d); //TBH
   Serial.print(" ");
-  if(myPID.GetMode()==AUTOMATIC) Serial.print("Automatic");
-  else Serial.print("Manual");  
+  //if(myPID.GetMode()==AUTOMATIC) Serial.print("Automatic");
+  //else Serial.print("Manual");  
+  Serial.print("Automatic"); //TBH
   Serial.print(" ");
-  if(myPID.GetDirection()==DIRECT) Serial.println("Direct");
-  else Serial.println("Reverse");
+  //if(myPID.GetDirection()==DIRECT) Serial.println("Direct");
+  //else Serial.println("Reverse");
+  Serial.println("Direct"); //TBH
 }
 
 
