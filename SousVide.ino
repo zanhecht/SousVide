@@ -31,6 +31,10 @@ SB5	SB4
 #define INITIAL_KP 2000
 #define INITIAL_KI 0.25
 #define INITIAL_KD 0
+//CrockPot Cooking Settings
+#define CP_HIGH_PCT 1.00
+#define CP_LOW_PCT .708
+#define CP_WARM_PCT .295
 
 //Program Parameters
 unsigned long tempTime = TEMP_TIME; //how often to check the thermometer
@@ -53,9 +57,12 @@ PID myPID(&Input, &Output, &Setpoint,INITIAL_KP,INITIAL_KI,INITIAL_KD,DIRECT);
 unsigned long serialTime; //this will help us know when to talk with processing
 unsigned long windowStartTime; //PWM Window start time
 unsigned long tReset = 0; //Variable for resetting timer
+long countDn = 0; //Variable for Countdown timer
+long oldTempTime = 0; //Variable to freeze countdown timer
 char dispStr[9]; //String to display on LED
+char highLow; //For countdown timer, is crockpot on High or Low?
 word ledBar = 0; //Which LEDs to light
-byte ledDots = 0, mode=0; //Periods on LED display and mode counter
+byte ledDots = 0, mode=0, settings=0; //Periods on LED display and mode and settings counter
 
 void setup() {
   // start serial port
@@ -108,13 +115,19 @@ void loop() {
   //Register button presses
   byte keys = module.getButtons();
   
-  //Switch Modes
+  //Switch settings and modes
   if (keys == 0b10000000) {
     delay(250);
-    if (mode < 4) mode++;
+    if (settings < 4) settings++;
+    else settings = 0;
+  } else if (keys == 0b01000000) {
+    delay(250);
+    if (mode < 2) mode++;
     else mode = 0;
+    settings = 0;
   }
 
+  
   // Calculate output mapping to LEDs
   word outToLed = (1 << (char)((Output/1000) +0.5)) - 1;
   
@@ -131,72 +144,128 @@ void loop() {
     outToLed = outToLed << 8;
   }
 
-  //Read in current pid tunings
-  double p, i, d;
-  p = myPID.GetKp();
-  i = myPID.GetKi();
-  d = myPID.GetKd();
-  
-  if(mode == 0) { //Sous Vide
-    /*
-    // display Fahrenheit formatted temperatures
-    sprintf(dispStr,"%3hi%3hi\n",(int)(Setpoint*10),(int)(Input*10));
-    */  
-  
-    // display Celsius formatted temperatures
-    double cSetpoint=sensors.toCelsius(Setpoint);
-    if(cInput!=9999) sprintf(dispStr,"%d*%d*\n",(int)((cSetpoint*10)+0.5),(int)((cInput*10)+0.5));
-      else sprintf(dispStr,"---*---*\n");
-    
-    //Process Buttons
-    if ((keys == 0b00000010) && (Setpoint <= 210.2)) Setpoint=Setpoint+0.9; //Setpoint Up
-      else if ((keys == 0b00000001) && (Setpoint >= 50.0)) Setpoint=Setpoint-0.9; //Setpoint Down
-  
-    ledBar = outToLed;
-    ledDots = 0b01000100;
-  } else if(mode==1) { //Timer
+  if(mode == 0) { //Timer Mode
+     myPID.SetMode(MANUAL); //Turn PID off
     unsigned long tTime = (millis() - tReset)/1000;
     if((keys == 0b00000001)) tReset = millis();
     int tSec = tTime % 60;
     int tMin = (tTime / 60) % 60;
     int tHr = tTime / 3600;
     sprintf(dispStr,"t %02hi%02hi%02hi\n",tHr,tMin,tSec);
-    
     ledBar = 0;
     ledDots = 0b00010100;
-  } else if(mode==2) {
-    sprintf(dispStr,"Pro %4hi\n",(int)p);
+    Output = 0;
     
-    //Process Buttons
-    if ((keys == 0b00000010) && (p  < 9900)) p=p+100; //Setpoint Up
-      else if ((keys == 0b00000001) && (p >= 100)) p=p-100; //Setpoint Down
+  } else if(mode == 1) { // Sous Vide Mode
+    myPID.SetMode(AUTOMATIC); //Turn PID on
+    //Read in current pid tunings
+    double p, i, d;
+    p = myPID.GetKp();
+    i = myPID.GetKi();
+    d = myPID.GetKd();
     
-    myPID.SetTunings(p, i, d);
-        
-    ledBar = 0;
-    ledDots = 0b00000000;
-  } else if(mode==3) {
-    sprintf(dispStr,"Int %4hi\n",(int)((i*100)+0.5));  
-
-    //Process Buttons
-    if ((keys == 0b00000010) && (i  < 99.95)) i=i+0.05; //Setpoint Up
-      else if ((keys == 0b00000001) && (i >= 0.05)) i=i-0.05; //Setpoint Down
+    if(settings == 0) { //Temperature Display
+      /*
+      // display Fahrenheit formatted temperatures
+      sprintf(dispStr,"%3hi%3hi\n",(int)(Setpoint*10),(int)(Input*10));
+      */  
+      // display Celsius formatted temperatures
+      double cSetpoint=sensors.toCelsius(Setpoint);
+      if(cInput!=9999) sprintf(dispStr,"%d*%d*\n",(int)((cSetpoint*10)+0.5),(int)((cInput*10)+0.5));
+        else sprintf(dispStr,"---*---*\n");
+      //Process Buttons
+      if ((keys == 0b00000010) && (Setpoint <= 210.2)) Setpoint=Setpoint+0.9; //Setpoint Up
+        else if ((keys == 0b00000001) && (Setpoint >= 50.0)) Setpoint=Setpoint-0.9; //Setpoint Down
+      // Output led bar and dots
+      ledBar = outToLed;
+      ledDots = 0b01000100;
+    } else if(settings==1) { //Timer
+      unsigned long tTime = (millis() - tReset)/1000;
+      if((keys == 0b00000001)) tReset = millis();
+      int tSec = tTime % 60;
+      int tMin = (tTime / 60) % 60;
+      int tHr = tTime / 3600;
+      sprintf(dispStr,"t %02hi%02hi%02hi\n",tHr,tMin,tSec);
+      ledBar = 0;
+      ledDots = 0b00010100;
+    } else if(settings==2) { //P
+      sprintf(dispStr,"Pro %4hi\n",(int)p);
+      //Process Buttons
+      if ((keys == 0b00000010) && (p  < 9900)) p=p+100; //Setpoint Up
+        else if ((keys == 0b00000001) && (p >= 100)) p=p-100; //Setpoint Down
+      myPID.SetTunings(p, i, d);
+      ledBar = 0;
+      ledDots = 0b00000000;
+    } else if(settings==3) { //I
+      sprintf(dispStr,"Int %4hi\n",(int)((i*100)+0.5));  
+      //Process Buttons
+      if ((keys == 0b00000010) && (i  < 99.95)) i=i+0.05; //Setpoint Up
+        else if ((keys == 0b00000001) && (i >= 0.05)) i=i-0.05; //Setpoint Down
+      myPID.SetTunings(p, i, d);
+      ledBar = 0;
+      ledDots = 0b00000100;
+    } else if(settings==4) { //D
+      sprintf(dispStr,"dEr %4hi\n",(int)d);
+      //Process Buttons
+      if ((keys == 0b00000010) && (d  < 9999)) d++; //Setpoint Up
+        else if ((keys == 0b00000001) && (d >= 1)) d--; //Setpoint Down
+      myPID.SetTunings(p, i, d);
+      ledBar = 0;
+      ledDots = 0b00000000;    
+    }
     
-    myPID.SetTunings(p, i, d);
-    
-    ledBar = 0;
-    ledDots = 0b00000100;
-  } else if(mode==4) {
-    sprintf(dispStr,"dEr %4hi\n",(int)d);
-    
-    //Process Buttons
-    if ((keys == 0b00000010) && (d  < 9999)) d++; //Setpoint Up
-      else if ((keys == 0b00000001) && (d >= 1)) d--; //Setpoint Down
-    
-    myPID.SetTunings(p, i, d);
-    
-    ledBar = 0;
-    ledDots = 0b00000000;    
+  } else if(mode == 2) { // Countdown Timer
+    myPID.SetMode(MANUAL); //Turn PID off
+    long tempTime = (long)millis();
+    long cTime = countDn - tempTime;
+    if (cTime < 0) cTime = 0;
+    Serial.print("Countdown");
+    Serial.print(cTime);
+    long cMs = cTime % 1000;
+    long cSec = (cTime/1000) % 60;
+    long cMin = (cTime / 60000) % 60;
+    long cHr = cTime / 3600000;
+    if(settings == 0) { // Main Screen
+      if (countDn == 0) { // Title Screen
+        if (tempTime%500 > 200) sprintf(dispStr,"Countdn \n");
+          else sprintf(dispStr,"        \n");
+        ledDots = 0b00000000; 
+      } else { // Display Countdown
+        sprintf(dispStr,"C %02hi%02hi%02hi\n",(int)cHr,(int)cMin,(int)cSec);
+        ledBar = 0;
+        ledDots = 0b00010100;
+      }
+    } else if((settings == 1)||(settings == 2)) { // Set Timer
+      if (settings == 1) { // Hours
+        if (tempTime%500 > 200) sprintf(dispStr,"H %02hi%02hi%02hi\n",(int)cHr,(int)cMin,(int)cSec);
+          else sprintf(dispStr,"    %02hi%02hi\n",(int)cMin,(int)cSec);
+        if (keys == 0b00000010) cHr = (cHr+1)%24; //Hour Up
+          else if (keys == 0b00000001) cHr = (cHr-1)%24; //Hour Down
+      } else if (settings == 2) { // Minutes
+        if (tempTime%500 > 200) sprintf(dispStr,"M %02hi%02hi%02hi\n",(int)cHr,(int)cMin,(int)cSec);
+          else sprintf(dispStr,"  %02hi  %02hi\n",(int)cHr,(int)cSec);
+        if (keys == 0b00000010) cMin = (cMin+1)%60; //Hour Up
+          else if (keys == 0b00000001) cMin = (cMin-1)%60; //Hour Down 
+      }
+      Serial.print(" H");
+      Serial.print(cHr);
+      Serial.print(" M");
+      Serial.print(cMin);
+      Serial.print(" S");
+      Serial.print(cSec);
+      Serial.print(" ms");
+      Serial.print(cMs);
+      cTime = (cHr*3600000)+(cMin*60000)+(cSec*1000)+cMs;
+      Serial.print(" cTime");
+      Serial.print(cTime);
+      Serial.print(" millis");
+      Serial.println(tempTime);
+      if(oldTempTime == 0) oldTempTime = tempTime;
+      countDn = cTime + tempTime + tempTime - oldTempTime;
+      oldTempTime = tempTime;
+      ledBar = 0;
+      ledDots = 0b00010100;
+    } else settings = 0; //Reset Settings Counter
   }
   
   //write to display
@@ -205,7 +274,7 @@ void loop() {
   module.setLEDs(ledBar);
   
   //delay to keep wait between button checks
-  delay(125);
+  if (keys != 0b00000000) delay(125);
 
   //send-receive with processing if it's time
   if(millis()>serialTime)
