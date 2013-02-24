@@ -15,24 +15,22 @@ SB5	SB4
 
 // Data wire is plugged into port 2 on the Arduino
 #define ONE_WIRE_BUS 2
-
 // initial set point
 #define INITIAL_SET_POINT 144.5
-
 // pin to trigger relay
 #define TRIGGER_PIN 10
-
 // milliseconds we want as a minimum time on or off
 #define MINIMUM_ON_OFF_TIME 500
-
 // Temp sensor resolution in bits
 #define SENSOR_RESOLUTION 12
-
 // Temp sensor polling time in milliseconds (allow at least 750 ms for 12-bit temp conversion)
 #define TEMP_TIME 1000
-
 //PWM Period in milliseconds
 #define WINDOW_SIZE 8000
+//PWM Parameters
+#define INITIAL_KP 2000
+#define INITIAL_KI 0.25
+#define INITIAL_KD 0
 
 //Program Parameters
 unsigned long tempTime = TEMP_TIME; //how often to check the thermometer
@@ -48,15 +46,16 @@ DeviceAddress tempDeviceAddress;
 TM1638 module(8, 9, 7); 
 
 //Define Variables we'll be connecting to
-double Setpoint, Input, Output, cSetpoint, cInput;
+double Setpoint, Input, Output, cInput=9999;
 //Specify the links and initial tuning parameters
-PID myPID(&Input, &Output, &Setpoint,2000,0.25,0,DIRECT);
+PID myPID(&Input, &Output, &Setpoint,INITIAL_KP,INITIAL_KI,INITIAL_KD,DIRECT);
 
 unsigned long serialTime; //this will help us know when to talk with processing
 unsigned long windowStartTime; //PWM Window start time
-char sOutput[9];
-int Threshold = ((1024*MINIMUM_ON_OFF_TIME)/WINDOW_SIZE);
-word ledBar = 0;
+unsigned long tReset = 0; //Variable for resetting timer
+char dispStr[9]; //String to display on LED
+word ledBar = 0; //Which LEDs to light
+byte ledDots = 0, mode=0; //Periods on LED display and mode counter
 
 void setup() {
   // start serial port
@@ -66,7 +65,7 @@ void setup() {
   windowStartTime = millis();
   
   // Initialize Variables
-  Input = 10;
+  Input = 50;
   Setpoint = INITIAL_SET_POINT;
   Output = 0;
     
@@ -82,7 +81,7 @@ void setup() {
   myPID.SetSampleTime(1000); //set sample time in milliseconds 
   myPID.SetMode(AUTOMATIC); //Turn PID on
   
-  //turn on display to brightness 1 (0-7)
+  //turn on display to brightness 0 (0-7)
   module.setupDisplay(true, 0);
   
   //activate relay pin as an output
@@ -93,7 +92,7 @@ void setup() {
 }
 
 void loop() {
-
+  
   // Poll temp sensor once a second, and send request for next poll  
   if(millis()>tempTime)
   {
@@ -101,62 +100,112 @@ void loop() {
     Input = sensors.toFahrenheit(cInput);
     sensors.requestTemperatures(); // Send the command to get temperatures
     tempTime+=TEMP_TIME;
-    //Serial.print("Temperature: ");
-    //Serial.println(cInput);
-    //Serial.print("Output: ");
-    //Serial.println(Output);
   }
   
-// Turn on PID when we are getting close
-/*  if((Setpoint - Input) > 9.0) {
-    myPID.SetMode(MANUAL); //Turn PID off
-    Output=8000;
-  }
-  else myPID.SetMode(AUTOMATIC); //Turn PID on
-*/
-// Call PID Function. Most of the time it will just return without doing anything. At a frequency specified by SetSampleTime it will calculate a new Output. 
+  // Call PID Function. Most of the time it will just return without doing anything. At a frequency specified by SetSampleTime it will calculate a new Output. 
   myPID.Compute();
   
-  /*
-  // display Fahrenheit formatted temperatures
-  if (Input<100 && Setpoint<100) sprintf(sOutput," %d %d\n",(int)(Setpoint*10),(int)(Input*10));
-    else if (Input<100) sprintf(sOutput,"%d %d\n",(int)(Setpoint*10),(int)(Input*10));
-    else if (Setpoint<100) sprintf(sOutput," %d%d\n",(int)(Setpoint*10),(int)(Input*10));
-    else sprintf(sOutput,"%d%d\n",(int)(Setpoint*10),(int)(Input*10));
-  module.setDisplayToString(sOutput,0b00100010);
-  */  
-  
-  // display Celsius formatted temperatures
-  cSetpoint=sensors.toCelsius(Setpoint);
-  sprintf(sOutput,"%d*%d*\n",(int)((cSetpoint*10)+0.5),(int)((cInput*10)+0.5));
-  module.setDisplayToString(sOutput,0b01000100);
-  
-  // Calculate output mapping to LEDs
-  ledBar = (1 << (char)((Output/1000) +0.5)) - 1;
-
-
-  //delay to keep wait between button checks
-  delay(125);
-
   //Register button presses
   byte keys = module.getButtons();
-  if ((keys == 0b00000010) && (Setpoint <= 210.2)) Setpoint=Setpoint+0.9; //Setpoint Up
-  else if ((keys == 0b00000001) && (Setpoint >= 50.0)) Setpoint=Setpoint-0.9; //Setpoint Down
+  
+  //Switch Modes
+  if (keys == 0b10000000) {
+    delay(250);
+    if (mode < 4) mode++;
+    else mode = 0;
+  }
+
+  // Calculate output mapping to LEDs
+  word outToLed = (1 << (char)((Output/1000) +0.5)) - 1;
   
   //turn the output pin on/off based on pid output
   unsigned long now = millis();
   if(now - windowStartTime>WINDOW_SIZE) windowStartTime += WINDOW_SIZE; //time to shift the Relay Window
   if(Output > now - windowStartTime)
   {
-    digitalWrite(TRIGGER_PIN,HIGH);
-    module.setLEDs(ledBar);
-    
+    digitalWrite(TRIGGER_PIN,HIGH);  
   }
   else
   {
     digitalWrite(TRIGGER_PIN,LOW);
-    module.setLEDs(ledBar << 8);
+    outToLed = outToLed << 8;
   }
+
+  //Read in current pid tunings
+  double p, i, d;
+  p = myPID.GetKp();
+  i = myPID.GetKi();
+  d = myPID.GetKd();
+  
+  if(mode == 0) { //Sous Vide
+    /*
+    // display Fahrenheit formatted temperatures
+    sprintf(dispStr,"%3hi%3hi\n",(int)(Setpoint*10),(int)(Input*10));
+    */  
+  
+    // display Celsius formatted temperatures
+    double cSetpoint=sensors.toCelsius(Setpoint);
+    if(cInput!=9999) sprintf(dispStr,"%d*%d*\n",(int)((cSetpoint*10)+0.5),(int)((cInput*10)+0.5));
+      else sprintf(dispStr,"---*---*\n");
+    
+    //Process Buttons
+    if ((keys == 0b00000010) && (Setpoint <= 210.2)) Setpoint=Setpoint+0.9; //Setpoint Up
+      else if ((keys == 0b00000001) && (Setpoint >= 50.0)) Setpoint=Setpoint-0.9; //Setpoint Down
+  
+    ledBar = outToLed;
+    ledDots = 0b01000100;
+  } else if(mode==1) { //Timer
+    unsigned long tTime = (millis() - tReset)/1000;
+    if((keys == 0b00000001)) tReset = millis();
+    int tSec = tTime % 60;
+    int tMin = (tTime / 60) % 60;
+    int tHr = tTime / 3600;
+    sprintf(dispStr,"t %02hi%02hi%02hi\n",tHr,tMin,tSec);
+    
+    ledBar = 0;
+    ledDots = 0b00010100;
+  } else if(mode==2) {
+    sprintf(dispStr,"Pro %4hi\n",(int)p);
+    
+    //Process Buttons
+    if ((keys == 0b00000010) && (p  < 9900)) p=p+100; //Setpoint Up
+      else if ((keys == 0b00000001) && (p >= 100)) p=p-100; //Setpoint Down
+    
+    myPID.SetTunings(p, i, d);
+        
+    ledBar = 0;
+    ledDots = 0b00000000;
+  } else if(mode==3) {
+    sprintf(dispStr,"Int %4hi\n",(int)((i*100)+0.5));  
+
+    //Process Buttons
+    if ((keys == 0b00000010) && (i  < 99.95)) i=i+0.05; //Setpoint Up
+      else if ((keys == 0b00000001) && (i >= 0.05)) i=i-0.05; //Setpoint Down
+    
+    myPID.SetTunings(p, i, d);
+    
+    ledBar = 0;
+    ledDots = 0b00000100;
+  } else if(mode==4) {
+    sprintf(dispStr,"dEr %4hi\n",(int)d);
+    
+    //Process Buttons
+    if ((keys == 0b00000010) && (d  < 9999)) d++; //Setpoint Up
+      else if ((keys == 0b00000001) && (d >= 1)) d--; //Setpoint Down
+    
+    myPID.SetTunings(p, i, d);
+    
+    ledBar = 0;
+    ledDots = 0b00000000;    
+  }
+  
+  //write to display
+  //Serial.println(dispStr);
+  module.setDisplayToString(dispStr,ledDots);
+  module.setLEDs(ledBar);
+  
+  //delay to keep wait between button checks
+  delay(125);
 
   //send-receive with processing if it's time
   if(millis()>serialTime)
