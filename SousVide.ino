@@ -1,5 +1,5 @@
 /*
-ARDUINO CROCKPOT SOUS VIDE AND TIMER v0.7
+ARDUINO CROCKPOT SOUS VIDE AND TIMER v0.7.2
 http://zansstuff.com/sous-vide
 Zan Hecht - Jan 22 2012
 
@@ -70,11 +70,11 @@ Hit "MODE" to switch between modes. Modes are described below:
     
     ==INTEGRAL ("Int ####")==
     Set the "I" coefficient in the PID loop. Use TEMP UP and TEMP DOWN to
-    increase and decrease the coefficient by 100
+    increase and decrease the coefficient by 0.05
 
     ==DERIVATIVE ("dEr ####")==
     Set the "D" coefficient in the PID loop. Use TEMP UP and TEMP DOWN to
-    increase and decrease the coefficient by 100
+    increase and decrease the coefficient by 1
   
   =====COUNTDOWN TIMER ("CL##.##.##" or "CH##.##.##")=====
   Acts like the timer function on more expensive crock-pots. Cooks at full
@@ -86,7 +86,8 @@ Hit "MODE" to switch between modes. Modes are described below:
   
   IMPORTANT: YOU MUST SPECIFY WHETHER THE CROCKPOT'S KNOB IS SET TO HIGH ("CH")
   OR LOW ("CL") OR THE KEEP WARM MODE MAY NOT KEEP YOUR FOOD HOT ENOUGH TO BE
-  SAFE!
+  SAFE! THE "CH" AND "CL" SETTINGS DO NOT CHANGE THE TEMPERATURE OF THE CROCK
+  POT -- YOU MUST DO THAT YOURSELF WITH THE CROCK-POT'S KNOB.
   
   *SET: Toggle between "Crockpot on HIGH" ("CH") and "Crockpot on LOW" ("CL")
   *HRS UP, HRS DOWN, MINS UP, MINS DOWN: Set the countdown timer time.
@@ -140,7 +141,7 @@ By default, DI0-->8, CLK-->9, SB0-->7
 //Program Parameters
 unsigned long tempTime = TEMP_TIME; //how often to check the thermometer
 
-// Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
+// Setup a oneWire instance to communicate with any OneWire devices
 OneWire oneWire(ONE_WIRE_BUS);
 
 // Pass our oneWire reference to Dallas Temperature. 
@@ -161,7 +162,6 @@ unsigned long tReset = 0; //Variable for resetting timer
 long countDn = 0; //Variable for Countdown timer
 char dispStr[9]; //String to display on LED
 char highLow = 'L'; //For countdown timer, is crockpot on High or Low?
-word ledBar = 0; //Which LEDs to light
 byte ledDots = 0, mode=0, settings=0, onOff=0; //Periods on LED display, mode and settings counters, and onOff toggle for timer mode
 
 void setup() {
@@ -209,7 +209,9 @@ void loop() {
     tempTime+=TEMP_TIME;
   }
   
-  // Call PID Function. Most of the time it will just return without doing anything. At a frequency specified by SetSampleTime it will calculate a new Output. 
+  //Call PID Function.
+  //Most of the time it will just return without doing anything.
+  //At a frequency specified by SetSampleTime it will calculate a new Output. 
   myPID.Compute();
   
   //Register button presses
@@ -241,7 +243,7 @@ void loop() {
   else //Turn off relay
   {
     digitalWrite(TRIGGER_PIN,LOW);
-    outToLed = outToLed << 8;
+    outToLed = outToLed << 8; //Shift LED bar to make LEDs green
   }
 
   if(mode == 0) { //Simple time-elapsed Mode with crockpot off.
@@ -261,7 +263,6 @@ void loop() {
       sprintf(dispStr,"  %02hi%02hi%02hi\n",tHr,tMin,tSec); //Create output string
       Output = 0;
     }
-    ledBar = outToLed; // Set LEDs based on output
     ledDots = 0b00010100; //Set dots to separate hours, minutes, and seconds.
     
   } else if(mode == 1) { // Sous Vide Mode
@@ -284,8 +285,7 @@ void loop() {
       //Process Buttons
       if ((keys == 0b00000010) && (Setpoint <= 210.2)) Setpoint=Setpoint+0.9; //Setpoint Up
         else if ((keys == 0b00000001) && (Setpoint >= 50.0)) Setpoint=Setpoint-0.9; //Setpoint Down
-      // Output led bar and dots
-      ledBar = outToLed;
+      // Output led dots
       ledDots = 0b01000100;
     } else if(settings==1) { //Timer
       unsigned long tTime = (millis() - tReset)/1000;
@@ -294,31 +294,27 @@ void loop() {
       int tMin = (tTime / 60) % 60;
       int tHr = tTime / 3600;
       sprintf(dispStr,"t %02hi%02hi%02hi\n",tHr,tMin,tSec);
-      ledBar = 0;
       ledDots = 0b00010100;
-    } else if(settings==2) { //Set P
+    } else if(settings==2) { //Set Proportional Coefficient
       sprintf(dispStr,"Pro %4hi\n",(int)p);
       //Process Buttons
-      if ((keys == 0b00000010) && (p  < 9900)) p=p+100; //Setpoint Up
-        else if ((keys == 0b00000001) && (p >= 100)) p=p-100; //Setpoint Down
+      if ((keys == 0b00000010) && (p  < 9900)) p=p+100; //Increase coefficient
+        else if ((keys == 0b00000001) && (p >= 100)) p=p-100; //Decrease coefficient
       myPID.SetTunings(p, i, d);
-      ledBar = 0;
       ledDots = 0b00000000;
-    } else if(settings==3) { //Set I
+    } else if(settings==3) { //Set Integral Coefficient
       sprintf(dispStr,"Int %4hi\n",(int)((i*100)+0.5));  
       //Process Buttons
-      if ((keys == 0b00000010) && (i  < 99.95)) i=i+0.05; //Setpoint Up
-        else if ((keys == 0b00000001) && (i >= 0.05)) i=i-0.05; //Setpoint Down
+      if ((keys == 0b00000010) && (i  < 99.95)) i=i+0.05; //Increase coefficient
+        else if ((keys == 0b00000001) && (i >= 0.05)) i=i-0.05; //Decrease coefficient
       myPID.SetTunings(p, i, d);
-      ledBar = 0;
       ledDots = 0b00000100;
-    } else if(settings==4) { //Set D
+    } else if(settings==4) { //Set Derivative Coefficient
       sprintf(dispStr,"dEr %4hi\n",(int)d);
       //Process Buttons
-      if ((keys == 0b00000010) && (d  < 9999)) d++; //Setpoint Up
-        else if ((keys == 0b00000001) && (d >= 1)) d--; //Setpoint Down
+      if ((keys == 0b00000010) && (d  < 9999)) d++; //Increase coefficient
+        else if ((keys == 0b00000001) && (d >= 1)) d--; //Decrease coefficient
       myPID.SetTunings(p, i, d);
-      ledBar = 0;
       ledDots = 0b00000000;    
     }
     
@@ -354,14 +350,13 @@ void loop() {
           else Output = 8000*CP_WARM_PCT;
       }
       
-    ledBar = outToLed;
     ledDots = 0b00010100;
   }
   
   //write to display
   //Serial.println(dispStr);
   module.setDisplayToString(dispStr,ledDots);
-  module.setLEDs(ledBar);
+  module.setLEDs(outToLed);
   
   //delay to keep wait between button checks
   if (keys != 0b00000000) delay(125);
@@ -498,5 +493,10 @@ This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the full
 text of the Create-Commons license linked to above for more details.
+
+CHANGELOG:
+0.7 First Public Release
+  0.7.1 Fixed typo in instructions
+  0.7.2 Simplified code to output to LED bar
 */
 
