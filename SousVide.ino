@@ -1,10 +1,109 @@
 /*
-TM1638.h - Library for TM1638.
+ARDUINO CROCKPOT SOUS VIDE AND TIMER v0.7
+http://zansstuff.com/sous-vide
+Zan Hecht - Jan 22 2012
+
+Concept and original code inspired by the article "Turn your crock pot into a
+PID controlled sous vide cooker for $25" by andy@chiefmarley.com at
+http://chiefmarley.com/Arduino/?p=3
+
+PID settings below are for a Rival 6-qt crock pot set on "High".
+
+Temperature input via Dallas DS18B20 One-Wire temperature sensor. Datasheet at
+http://www.maxim-ic.com/datasheet/index.mvp/id/2812
+
+UI is via a TM1638-based I/O module with an 8-character 7-seg display, 8 red/
+green LEDs, and 8 buttons. This is available from DealExtreme as "8X Digital
+Tube + 8X Key + 8X Double Color LED Module" at
+http://dealextreme.com/p/module-81873
+
+Written for Arduino 1.0 http://arduino.cc/hu/Main/Software
+
+TM1638.h: http://code.google.com/p/tm1638-library/
+OneWire.h: http://www.pjrc.com/teensy/td_libs_OneWire.html
+DallasTemperature.h: http://milesburton.com/Dallas_Temperature_Control_Library
+PID_v1.h: http://www.arduino.cc/playground/Code/PIDLibrary
+
+This program contains code by Brett Beauregard to communicate with the
+Processing PID front end using the code available at
+http://code.google.com/p/arduino-pid-library/ and
+the Processing software available at http://processing.org/download
+
+=================================INSTRUCTIONS=================================
+Key assignments on the TM1638 are as follows (LSB to MSB):
+TEMP DOWN | TEMP UP | HRS DOWN | HOURS UP | MINS DOWN | MINS UP | MODE | SET
+
+LEDs show the power being applied to the crock-pot via PWM. 8 LEDs = 100%, no
+LEDs = 0%. If the LEDs are red, the relay is on. If the LEDs are green, the
+relay is off.
+
+Hit "MODE" to switch between modes. Modes are described below:
+
+  =====TIMER ("  ##.##.##")=====
+  Timer counts hours, minutes, and seconds. By default, the crock pot is off.
+  *SET: Reset Time
+  *MINS DOWN: Reset Time
+  *HRS DOWN: Reset Time
+  *TEMP UP: Turn on crock-pot at 100%. Display will read (On##.##.##)
+  *TEMP DOWN: Turn off crock-pot
+  
+  =====SOUS VIDE ("62.5°##.#°)=====
+  Sous Vide cooking mode. Crock-pot should be set on HIGH, filled with water,
+  and have some sort of forced circulation (pump or bubbler). Temperature
+  sensor shold be in water away from the sides and bottom.
+  
+  Temperatures are diplayed in Celcius. Temperature on the left is the
+  setpoint, temperature on the right is the current temperature.
+  
+  *SET: Cycle through settings described below
+  *TEMP UP: Raise the setpoint by 0.5°
+  *TEMP DOWN: Lower the setpoint by 0.5°
+  
+  Settings:
+    ==TIMER ("t ##.##.##")==
+    Functions much like the TIMER mode above. Reset by using HRS DOWN or MINS
+    DOWN.
+    
+    ==PROPORTIONAL ("Pro ####")==
+    Set the "P" coefficient in the PID loop. Use TEMP UP and TEMP DOWN to
+    increase and decrease the coefficient by 100
+    
+    ==INTEGRAL ("Int ####")==
+    Set the "I" coefficient in the PID loop. Use TEMP UP and TEMP DOWN to
+    increase and decrease the coefficient by 100
+
+    ==DERIVATIVE ("dEr ####")==
+    Set the "D" coefficient in the PID loop. Use TEMP UP and TEMP DOWN to
+    increase and decrease the coefficient by 100
+  
+  =====COUNTDOWN TIMER ("CL##.##.##" or "CH##.##.##")=====
+  Acts like the timer function on more expensive crock-pots. Cooks at full
+  power until the time runs out and then decreases the power to the equivalent
+  of the crock-pot WARM setting. As measured on my crock-pot, WARM is
+  approximately 30% of the crock-pot's HIGH setting and 40% of the crock-pot's
+  LOW setting. There is no need to start or stop the timer -- it is always
+  running.
+  
+  IMPORTANT: YOU MUST SPECIFY WHETHER THE CROCKPOT'S KNOB IS SET TO HIGH ("CH")
+  OR LOW ("CL") OR THE KEEP WARM MODE MAY NOT KEEP YOUR FOOD HOT ENOUGH TO BE
+  SAFE!
+  
+  *SET: Toggle between "Crockpot on HIGH" ("CH") and "Crockpot on LOW" ("CL")
+  *HRS UP, HRS DOWN, MINS UP, MINS DOWN: Set the countdown timer time.
+  *TEMP UP: Set to "Crockpot on HIGH" ("CH")
+  *TEMP DOWN: Set to "Crockpot on LOW" ("CL")
+==============================================================================
+*/
+
+/*
+TM1638 Pinout
 GND  VCC
 DIO	CLK
 SB1	SB0
 SB3	SB2
 SB5	SB4
+
+By default, DI0-->8, CLK-->9, SB0-->7
 */
 
 #include <TM1638.h>
@@ -13,14 +112,16 @@ SB5	SB4
 #include <PID_v1.h>
 #include <stdio.h>
 
-// Data wire is plugged into port 2 on the Arduino
+// One-wire data wire is plugged into pin 2 on the Arduino
 #define ONE_WIRE_BUS 2
+// define TM1638 module connected to data pin 8, clock pin 9, and strobe pin 7
+#define T1638_D 8
+#define T1638_C 9
+#define T1638_S 7
 // initial set point
 #define INITIAL_SET_POINT 144.5
 // pin to trigger relay
 #define TRIGGER_PIN 10
-// milliseconds we want as a minimum time on or off
-#define MINIMUM_ON_OFF_TIME 500
 // Temp sensor resolution in bits
 #define SENSOR_RESOLUTION 12
 // Temp sensor polling time in milliseconds (allow at least 750 ms for 12-bit temp conversion)
@@ -32,9 +133,9 @@ SB5	SB4
 #define INITIAL_KI 0.25
 #define INITIAL_KD 0
 //CrockPot Cooking Settings
-#define CP_HIGH_PCT 1.00
-#define CP_LOW_PCT .708
-#define CP_WARM_PCT .295
+#define CP_HIGH_PCT 1.00 // Percent Power for crockpot on 'High'. Should always be 1.00.
+#define CP_LOW_PCT .708 // Percent Power for crockpot on 'Low'
+#define CP_WARM_PCT .295 // Percent Power for crockpot on 'Warm'
 
 //Program Parameters
 unsigned long tempTime = TEMP_TIME; //how often to check the thermometer
@@ -47,7 +148,7 @@ DallasTemperature sensors(&oneWire);
 DeviceAddress tempDeviceAddress;
 
 // define a module on data pin 8, clock pin 9 and strobe pin 7
-TM1638 module(8, 9, 7); 
+TM1638 module(T1638_D, T1638_C, T1638_S); 
 
 //Define Variables we'll be connecting to
 double Setpoint, Input, Output, cInput=9999;
@@ -58,11 +159,10 @@ unsigned long serialTime; //this will help us know when to talk with processing
 unsigned long windowStartTime; //PWM Window start time
 unsigned long tReset = 0; //Variable for resetting timer
 long countDn = 0; //Variable for Countdown timer
-long oldTempTime = 0; //Variable to freeze countdown timer
 char dispStr[9]; //String to display on LED
-char highLow; //For countdown timer, is crockpot on High or Low?
+char highLow = 'L'; //For countdown timer, is crockpot on High or Low?
 word ledBar = 0; //Which LEDs to light
-byte ledDots = 0, mode=0, settings=0; //Periods on LED display and mode and settings counter
+byte ledDots = 0, mode=0, settings=0, onOff=0; //Periods on LED display, mode and settings counters, and onOff toggle for timer mode
 
 void setup() {
   // start serial port
@@ -134,27 +234,35 @@ void loop() {
   //turn the output pin on/off based on pid output
   unsigned long now = millis();
   if(now - windowStartTime>WINDOW_SIZE) windowStartTime += WINDOW_SIZE; //time to shift the Relay Window
-  if(Output > now - windowStartTime)
+  if(Output > now - windowStartTime) //Turn on relay during "on" period
   {
     digitalWrite(TRIGGER_PIN,HIGH);  
   }
-  else
+  else //Turn off relay
   {
     digitalWrite(TRIGGER_PIN,LOW);
     outToLed = outToLed << 8;
   }
 
-  if(mode == 0) { //Timer Mode
-     myPID.SetMode(MANUAL); //Turn PID off
-    unsigned long tTime = (millis() - tReset)/1000;
-    if((keys == 0b00000001)) tReset = millis();
-    int tSec = tTime % 60;
+  if(mode == 0) { //Simple time-elapsed Mode with crockpot off.
+    myPID.SetMode(MANUAL); //Turn PID off
+    unsigned long tTime = (millis() - tReset)/1000; //Get time in seconds
+    if(keys & 0b10010100) tReset = millis(); //reset if any time down or the Set button is pushed
+    if(keys == 0b00000010) onOff = 1; //Turn on crockpot if Temperature Up button is pushed
+      else if(keys == 0b00000001) onOff = 0; //Turn off crockpot if Temperature Down button is pushed
+    // Calculate hours, minutes, and seconds
+    int tSec = tTime % 60; 
     int tMin = (tTime / 60) % 60;
     int tHr = tTime / 3600;
-    sprintf(dispStr,"t %02hi%02hi%02hi\n",tHr,tMin,tSec);
-    ledBar = 0;
-    ledDots = 0b00010100;
-    Output = 0;
+    if (onOff) { //Toggle output and display based on whether crockpot is on or off
+      sprintf(dispStr,"On%02hi%02hi%02hi\n",tHr,tMin,tSec); //Create output string
+      Output = 8000;
+    } else {
+      sprintf(dispStr,"  %02hi%02hi%02hi\n",tHr,tMin,tSec); //Create output string
+      Output = 0;
+    }
+    ledBar = outToLed; // Set LEDs based on output
+    ledDots = 0b00010100; //Set dots to separate hours, minutes, and seconds.
     
   } else if(mode == 1) { // Sous Vide Mode
     myPID.SetMode(AUTOMATIC); //Turn PID on
@@ -181,14 +289,14 @@ void loop() {
       ledDots = 0b01000100;
     } else if(settings==1) { //Timer
       unsigned long tTime = (millis() - tReset)/1000;
-      if((keys == 0b00000001)) tReset = millis();
+      if(keys & 0b00010100) tReset = millis(); //reset if any time down buttons are pushed
       int tSec = tTime % 60;
       int tMin = (tTime / 60) % 60;
       int tHr = tTime / 3600;
       sprintf(dispStr,"t %02hi%02hi%02hi\n",tHr,tMin,tSec);
       ledBar = 0;
       ledDots = 0b00010100;
-    } else if(settings==2) { //P
+    } else if(settings==2) { //Set P
       sprintf(dispStr,"Pro %4hi\n",(int)p);
       //Process Buttons
       if ((keys == 0b00000010) && (p  < 9900)) p=p+100; //Setpoint Up
@@ -196,7 +304,7 @@ void loop() {
       myPID.SetTunings(p, i, d);
       ledBar = 0;
       ledDots = 0b00000000;
-    } else if(settings==3) { //I
+    } else if(settings==3) { //Set I
       sprintf(dispStr,"Int %4hi\n",(int)((i*100)+0.5));  
       //Process Buttons
       if ((keys == 0b00000010) && (i  < 99.95)) i=i+0.05; //Setpoint Up
@@ -204,7 +312,7 @@ void loop() {
       myPID.SetTunings(p, i, d);
       ledBar = 0;
       ledDots = 0b00000100;
-    } else if(settings==4) { //D
+    } else if(settings==4) { //Set D
       sprintf(dispStr,"dEr %4hi\n",(int)d);
       //Process Buttons
       if ((keys == 0b00000010) && (d  < 9999)) d++; //Setpoint Up
@@ -219,53 +327,35 @@ void loop() {
     long tempTime = (long)millis();
     long cTime = countDn - tempTime;
     if (cTime < 0) cTime = 0;
-    Serial.print("Countdown");
-    Serial.print(cTime);
+
     long cMs = cTime % 1000;
     long cSec = (cTime/1000) % 60;
     long cMin = (cTime / 60000) % 60;
     long cHr = cTime / 3600000;
-    if(settings == 0) { // Main Screen
-      if (countDn == 0) { // Title Screen
-        if (tempTime%500 > 200) sprintf(dispStr,"Countdn \n");
-          else sprintf(dispStr,"        \n");
-        ledDots = 0b00000000; 
-      } else { // Display Countdown
-        sprintf(dispStr,"C %02hi%02hi%02hi\n",(int)cHr,(int)cMin,(int)cSec);
-        ledBar = 0;
-        ledDots = 0b00010100;
+
+    if        (keys == 0b00001000) cHr = (cHr+1)%24; //Hour Up
+      else if (keys == 0b00000100) cHr = (cHr-1)%24; //Hour Down
+      else if (keys == 0b00100000) cMin = (cMin+1); //Min Up
+      else if (keys == 0b00010000) cMin = (cMin-1); //Min Down 
+      else if (keys == 0b10000000) { // Toggle High/Low settings
+        if (highLow == 'L') highLow = 'H';
+        else highLow = 'L';
+      } else if (keys == 0b00000010) highLow = 'H';
+      else if (keys == 0b00000001) highLow = 'L';
+      
+    sprintf(dispStr,"C%c%02hi%02hi%02hi\n",highLow,(int)cHr,(int)cMin,(int)cSec);
+    
+    cTime = (cHr*3600000)+(cMin*60000)+(cSec*1000)+cMs;
+    countDn = cTime + tempTime;
+    
+    if (cTime > 500) Output = 8000;
+      else {
+        if (highLow == 'L') Output = 8000*(CP_WARM_PCT/CP_LOW_PCT);
+          else Output = 8000*CP_WARM_PCT;
       }
-    } else if((settings == 1)||(settings == 2)) { // Set Timer
-      if (settings == 1) { // Hours
-        if (tempTime%500 > 200) sprintf(dispStr,"H %02hi%02hi%02hi\n",(int)cHr,(int)cMin,(int)cSec);
-          else sprintf(dispStr,"    %02hi%02hi\n",(int)cMin,(int)cSec);
-        if (keys == 0b00000010) cHr = (cHr+1)%24; //Hour Up
-          else if (keys == 0b00000001) cHr = (cHr-1)%24; //Hour Down
-      } else if (settings == 2) { // Minutes
-        if (tempTime%500 > 200) sprintf(dispStr,"M %02hi%02hi%02hi\n",(int)cHr,(int)cMin,(int)cSec);
-          else sprintf(dispStr,"  %02hi  %02hi\n",(int)cHr,(int)cSec);
-        if (keys == 0b00000010) cMin = (cMin+1)%60; //Hour Up
-          else if (keys == 0b00000001) cMin = (cMin-1)%60; //Hour Down 
-      }
-      Serial.print(" H");
-      Serial.print(cHr);
-      Serial.print(" M");
-      Serial.print(cMin);
-      Serial.print(" S");
-      Serial.print(cSec);
-      Serial.print(" ms");
-      Serial.print(cMs);
-      cTime = (cHr*3600000)+(cMin*60000)+(cSec*1000)+cMs;
-      Serial.print(" cTime");
-      Serial.print(cTime);
-      Serial.print(" millis");
-      Serial.println(tempTime);
-      if(oldTempTime == 0) oldTempTime = tempTime;
-      countDn = cTime + tempTime + tempTime - oldTempTime;
-      oldTempTime = tempTime;
-      ledBar = 0;
-      ledDots = 0b00010100;
-    } else settings = 0; //Reset Settings Counter
+      
+    ledBar = outToLed;
+    ledDots = 0b00010100;
   }
   
   //write to display
@@ -295,18 +385,6 @@ union {                // This Data structure lets
   float asFloat[6];    // sent from processing and
 }                      // easily convert it to a
 foo;                   // float array
-
-
-
-// getting float values from processing into the arduino
-// was no small task.  the way this program does it is
-// as follows:
-//  * a float takes up 4 bytes.  in processing, convert
-//    the array of floats we want to send, into an array
-//    of bytes.
-//  * send the bytes to the arduino
-//  * use a data structure known as a union to convert
-//    the array of bytes back into an array of floats
 
 //  the bytes coming from the arduino follow the following
 //  format:
@@ -361,10 +439,6 @@ void SerialReceive()
   Serial.flush();                         // * clear any random data from the serial buffer
 }
 
-// unlike our tiny microprocessor, the processing ap
-// has no problem converting strings into floats, so
-// we can just send strings.  much easier than getting
-// floats from processing to here no?
 void SerialSend()
 {
   Serial.print("PID ");
@@ -386,3 +460,43 @@ void SerialSend()
   if(myPID.GetDirection()==DIRECT) Serial.println("Direct");
   else Serial.println("Reverse");
 }
+
+/* COPYRIGHT 2012 ZAN HECHT
+
+ARDUINO CROCKPOT SOUS VIDE AND TIMER is licensed under a Creative-
+Commons Attribution Share-Alike License.
+http://creativecommons.org/licenses/by-sa/3.0/
+
+You are free:
+to Share — to copy, distribute and transmit the work
+to Remix — to adapt the work
+to make commercial use of the work
+
+Under the following conditions:
+* Attribution — You must attribute the work in the manner specified
+by the author or licensor (but not in any way that suggests that
+they endorse you or your use of the work).
+* Share Alike — If you alter, transform, or build upon this work,
+you may distribute the resulting work only under the same or similar
+license to this one.
+
+With the understanding that:
+* Waiver — Any of the above conditions can be waived if you get
+permission from the copyright holder.
+* Public Domain — Where the work or any of its elements is in the
+public domain under applicable law, that status is in no way
+affected by the license.
+* Other Rights — In no way are any of the following rights affected
+by the license:
+  * Your fair dealing or fair use rights, or other applicable
+  copyright exceptions and limitations;
+  * The author's moral rights;
+  * Rights other persons may have either in the work itself or in
+  how the work is used, such as publicity or privacy rights.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the full
+text of the Create-Commons license linked to above for more details.
+*/
+
