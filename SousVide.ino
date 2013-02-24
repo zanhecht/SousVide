@@ -11,11 +11,7 @@ SB5	SB4
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <PID_v1.h>
-#include <TimerOne.h>
 #include <stdio.h>
-
-// period in microseconds
-#define PERIOD_IN_MICRO_SECONDS 8000000
 
 // Data wire is plugged into port 2 on the Arduino
 #define ONE_WIRE_BUS 2
@@ -26,8 +22,20 @@ SB5	SB4
 // pin to trigger relay
 #define TRIGGER_PIN 10
 
-// microseconds we want as a minimum time on or off
-#define MINIMUM_ON_OFF_TIME 500000
+// milliseconds we want as a minimum time on or off
+#define MINIMUM_ON_OFF_TIME 500
+
+// Temp sensor resolution in bits
+#define SENSOR_RESOLUTION 12
+
+// Temp sensor polling time in milliseconds (allow at least 750 ms for 12-bit temp conversion)
+#define TEMP_TIME 1000
+
+//PWM Period in milliseconds
+#define WINDOW_SIZE 8000
+
+//Program Parameters
+unsigned long tempTime = TEMP_TIME; //how often to check the thermometer
 
 // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
 OneWire oneWire(ONE_WIRE_BUS);
@@ -42,88 +50,107 @@ TM1638 module(8, 9, 7);
 //Define Variables we'll be connecting to
 double Setpoint, Input, Output, cSetpoint, cInput;
 //Specify the links and initial tuning parameters
-PID myPID(&Input, &Output, &Setpoint,200,90,300,DIRECT);
+PID myPID(&Input, &Output, &Setpoint,794.15,0.63,0,DIRECT);
 
 unsigned long serialTime; //this will help us know when to talk with processing
-unsigned long tempTime = 1000; //how often to check the thermometer
-int  resolution = 12; //12-bit temperature resolution
-
+unsigned long windowStartTime; //PWM Window start time
 char sOutput[9];
-
-int Threshold = ((1024*MINIMUM_ON_OFF_TIME)/PERIOD_IN_MICRO_SECONDS);
-
+int Threshold = ((1024*MINIMUM_ON_OFF_TIME)/WINDOW_SIZE);
 word ledBar = 0;
 
 void setup() {
   // start serial port
   Serial.begin(9600); 
   
-  //Start Timer
-  Timer1.initialize(PERIOD_IN_MICRO_SECONDS);
+  //Initialize PWM Timer
+  windowStartTime = millis();
   
   // Initialize Variables
   Input = 10;
   Setpoint = INITIAL_SET_POINT;
   Output = 0;
-  Timer1.pwm(TRIGGER_PIN,Output);
-  Timer1.attachInterrupt(ComputePID);
-  //Timer1.start();
-  myPID.SetOutputLimits(0,1023);
     
   //Start Dallas Library
   sensors.begin();
   sensors.getAddress(tempDeviceAddress, 0);
-  sensors.setResolution(tempDeviceAddress, resolution);
+  sensors.setResolution(tempDeviceAddress, SENSOR_RESOLUTION);
   sensors.setWaitForConversion(false);  // async mode
   sensors.requestTemperatures();  // Send the command to get temperatures
   
-  //turn the PID on
-  myPID.SetMode(AUTOMATIC);
+  //Initialize PID
+  myPID.SetOutputLimits(0, WINDOW_SIZE); //tell the PID to range between 0 and the full window size
+  myPID.SetSampleTime(1000); //set sample time in milliseconds 
+  myPID.SetMode(AUTOMATIC); //Turn PID on
   
   //turn on display to brightness 1 (0-7)
   module.setupDisplay(true, 0);
+  
+  //activate relay pin as an output
+  digitalWrite(TRIGGER_PIN, LOW);    // sets the relay off
+  pinMode(TRIGGER_PIN, OUTPUT);
 
   Serial.print("Controller Ready\n");
 }
 
 void loop() {
 
-  // Call PID Function. Most of the time it will just return without doing anything. At a frequency specified by SetSampleTime it will calculate a new Output. 
-  myPID.Compute();
-   
+  // Poll temp sensor once a second, and send request for next poll  
   if(millis()>tempTime)
   {
     cInput = sensors.getTempCByIndex(0);
     Input = sensors.toFahrenheit(cInput);
     sensors.requestTemperatures(); // Send the command to get temperatures
-    tempTime+=1000;
+    tempTime+=TEMP_TIME;
+    Serial.print("Temperature: ");
+    Serial.println(cInput);
+    Serial.print("Output: ");
+    Serial.println(Output);
   }
   
-/*
-  // display a number and set the dots 
+  // Call PID Function. Most of the time it will just return without doing anything. At a frequency specified by SetSampleTime it will calculate a new Output. 
+  myPID.Compute();
+  
+  /*
+  // display Fahrenheit formatted temperatures
   if (Input<100 && Setpoint<100) sprintf(sOutput," %d %d\n",(int)(Setpoint*10),(int)(Input*10));
     else if (Input<100) sprintf(sOutput,"%d %d\n",(int)(Setpoint*10),(int)(Input*10));
     else if (Setpoint<100) sprintf(sOutput," %d%d\n",(int)(Setpoint*10),(int)(Input*10));
     else sprintf(sOutput,"%d%d\n",(int)(Setpoint*10),(int)(Input*10));
-*/  
-
+  module.setDisplayToString(sOutput,0b00100010);
+  */  
+  
+  // display Celsius formatted temperatures
   cSetpoint=sensors.toCelsius(Setpoint);
   sprintf(sOutput,"%d*%d*\n",(int)((cSetpoint*10)+0.5),(int)((cInput*10)+0.5));
   module.setDisplayToString(sOutput,0b01000100);
+  
+  // Calculate output mapping to LEDs
+  ledBar = (1 << (char)((Output/1000) +0.5)) - 1;
 
-    //delay to keep wait between button checks
+
+  //delay to keep wait between button checks
   delay(125);
-  
+
+  //Register button presses
   byte keys = module.getButtons();
-    if ((keys == 0b00000010) && (Setpoint <= 210.2))
-  {
-    Setpoint=Setpoint+0.9;
-  }
-  else if ((keys == 0b00000001) && (Setpoint >= 50.0))
-  {
-    Setpoint=Setpoint-0.9;
-  }
+  if ((keys == 0b00000010) && (Setpoint <= 210.2)) Setpoint=Setpoint+0.9; //Setpoint Up
+  else if ((keys == 0b00000001) && (Setpoint >= 50.0)) Setpoint=Setpoint-0.9; //Setpoint Down
   
+  //turn the output pin on/off based on pid output
+  unsigned long now = millis();
+  if(now - windowStartTime>WINDOW_SIZE) windowStartTime += WINDOW_SIZE; //time to shift the Relay Window
+  if(Output > now - windowStartTime)
+  {
+    digitalWrite(TRIGGER_PIN,HIGH);
+    module.setLEDs(ledBar);
+    
+  }
+  else
+  {
+    digitalWrite(TRIGGER_PIN,LOW);
+    module.setLEDs(ledBar << 8);
+  }
+
   //send-receive with processing if it's time
   if(millis()>serialTime)
   {
@@ -131,19 +158,7 @@ void loop() {
     SerialSend();
     serialTime+=500;
   }
-}
-
-void ComputePID()
-{
-  Serial.println("Computing PID Output...");
-  //if(Output>(1024-Threshold)) Output=1024; // minimum switch time applied
-  //if(Output<Threshold) Output=0;
-  Timer1.setPwmDuty(TRIGGER_PIN,Output);
-  //Serial.println(Input);
-  //Serial.println(Output);
-  //light the LEDs as temp output increases
-  ledBar = (1 << (char)((Output + 64) / 128)) - 1;
-  module.setLEDs(ledBar);
+  
 }
 
 /********************************************
@@ -247,4 +262,5 @@ void SerialSend()
   if(myPID.GetDirection()==DIRECT) Serial.println("Direct");
   else Serial.println("Reverse");
 }
+
 
