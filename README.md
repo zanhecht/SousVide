@@ -153,3 +153,5 @@ CHANGELOG
 * 0.8 Change to use Celcius internally, fixed temp sensor polling, added moving average for temperature, added "aggressive mode"  
   * 0.8.1 Split code into functions. Skip sous vide mode if temperature sensor is missing. Tweaked aggressive mode.
   * 0.8.2 Formatted instructions with Markdown
+  * 0.8.3 Bug Fixes
+  * 0.8.4 Changed aggressive mode I parameter to 0 to reduce overshoot.
