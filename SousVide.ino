@@ -1,7 +1,7 @@
 /*
-ARDUINO CROCKPOT SOUS VIDE AND TIMER v0.8.2
+ARDUINO CROCKPOT SOUS VIDE AND TIMER v0.8.4
 ===========================================
-Zan Hecht - 23 Feb 2013  
+Zan Hecht - 17 Mar 2013  
 http://zansstuff.com/sous-vide
 
 The following Arduino libraries are required to compile:
@@ -150,7 +150,7 @@ By default, DI0-->8, CLK-->9, SB0-->7
 // PID parameters for "aggressive mode", which is activated whenever the
 // temperature is > AGR_INT from the setpoint
 #define AGR_KP 3000
-#define AGR_KI 1
+#define AGR_KI 0
 #define AGR_KD 0
 #define AGR_INT 3
 // CrockPot Cooking Settings
@@ -196,7 +196,8 @@ bool isSensor=false; //Flag for determining if a sensor is connected
 void setup() {
   // start serial port
   Serial.begin(9600); 
-  Serial.println("ARDUINO CROCKPOT SOUS VIDE AND TIMER");  
+  Serial.println("  ARDUINO CROCKPOT SOUS VIDE AND TIMER  "); 
+  delay(5);
   
   //Initialize PWM Timer
   windowStartTime = millis();
@@ -205,18 +206,23 @@ void setup() {
   Input = -127;
   Setpoint = INITIAL_SET_POINT;
   Output = 0;
-    
+  
+  Serial.println("Initializing Temperature Sensor");
+  delay(5);
   //Start Dallas Library and initialize temp sensor
   sensors.begin();
   isSensor = sensors.getAddress(tempDeviceAddress, 0);
   sensors.setWaitForConversion(false);  // async mode 
   if(isSensor) {
     Serial.print("Temperature Sensor Found: ");
+    delay(5);
     Serial.println(tempDeviceAddress[0]);
+    delay(5);
     sensors.setResolution(tempDeviceAddress, SENSOR_RESOLUTION);
     sensors.requestTemperatures();  // Send the command to get temperatures
   } else {
     Serial.println("No Temperature Sensor Found");  
+    delay(5);
   }
   tempTime = millis()+TEMP_TIME; // Set the timer to retrieve temps
   
@@ -232,6 +238,7 @@ void setup() {
   pinMode(TRIGGER_PIN, OUTPUT);
 
   Serial.print("Controller Ready\n");
+  delay(5);
 }
 
 /********************************************
@@ -246,7 +253,7 @@ void loop() {
   //Call PID Function.
   //Most of the time it will just return without doing anything.
   //At a frequency specified by SetSampleTime it will calculate a new Output. 
-  if ( (abs(Setpoint-Input)>=AGR_INT) || (Setpoint<Input) ) { //Check for "aggressive mode"
+  if ((abs(Setpoint-Input)>=AGR_INT)) { //Check for "aggressive mode"
     double p, i, d; //Read current tuning
     p = myPID.GetKp();
     i = myPID.GetKi();
@@ -359,9 +366,9 @@ void doSousVide(byte keys) {
     
     if(settings == 0) setSousVide(keys); //Temperature Display
       else if(settings==1) setTimer(keys); //Timer
-      else if(settings==2) setPro(keys, p); //Set Proportional Coefficient
-      else if(settings==3) setInt(keys, i); //Set Integral Coefficient
-      else if(settings==4) setDer(keys, d); //Set Derivative Coefficient
+      else if(settings==2) p=setPro(keys, p); //Set Proportional Coefficient
+      else if(settings==3) i=setInt(keys, i); //Set Integral Coefficient
+      else if(settings==4) d=setDer(keys, d); //Set Derivative Coefficient
     if(settings>=2) myPID.SetTunings(p, i, d); //Set tunings if in p, i, or d mode
   } else { //Bypass Sous Vide mode if no sensor or valid data
     sprintf(dispStr,"---*---*\n");
@@ -432,28 +439,31 @@ void setTimer(byte keys) { //Timer
       ledDots = 0b00010100; //Set dots to separate hours, minutes, and seconds.
 }
 
-void setPro(byte keys, double p) { //Set Proportional Coefficient
+double setPro(byte keys, double p) { //Set Proportional Coefficient
       sprintf(dispStr,"Pro %4hi\n",(int)p);
       //Process Buttons
       if ((keys == 0b00000010) && (p  < 9900)) p=p+100; //Increase coefficient
         else if ((keys == 0b00000001) && (p >= 100)) p=p-100; //Decrease coefficient
       ledDots = 0b00000000;
+      return p;
 }
 
-void setInt(byte keys, double i) { //Set Integral Coefficient
+double setInt(byte keys, double i) { //Set Integral Coefficient
       sprintf(dispStr,"Int %4hi\n",(int)((i*100)+0.5));  
       //Process Buttons
       if ((keys == 0b00000010) && (i  < 99.95)) i=i+0.05; //Increase coefficient
         else if ((keys == 0b00000001) && (i >= 0.05)) i=i-0.05; //Decrease coefficient
       ledDots = 0b00000100;
+      return i;
 }
 
-void setDer(byte keys, double d) { //Set Derivative Coefficient
+double setDer(byte keys, double d) { //Set Derivative Coefficient
       sprintf(dispStr,"dEr %4hi\n",(int)d);
       //Process Buttons
       if ((keys == 0b00000010) && (d  < 9999)) d++; //Increase coefficient
         else if ((keys == 0b00000001) && (d >= 1)) d--; //Decrease coefficient
-      ledDots = 0b00000000;    
+      ledDots = 0b00000000;
+      return d;
 }
 
 /********************************************
@@ -592,4 +602,7 @@ CHANGELOG
 * 0.8 Change to use Celcius internally, fixed temp sensor polling, added moving average for temperature, added "aggressive mode"  
   * 0.8.1 Split code into functions. Skip sous vide mode if temperature sensor is missing. Tweaked aggressive mode.
   * 0.8.2 Formatted instructions with Markdown
+  * 0.8.3 Bug Fixes
+  * 0.8.4 Changed aggressive mode I parameter to 0 to reduce overshoot.
 */
+
