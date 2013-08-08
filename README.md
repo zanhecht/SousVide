@@ -1,6 +1,6 @@
-ARDUINO CROCKPOT SOUS VIDE AND TIMER v0.8.2
+ARDUINO CROCKPOT SOUS VIDE AND TIMER v0.8.4
 ===========================================
-Zan Hecht - 23 Feb 2013  
+Zan Hecht - 17 Mar 2013  
 http://zansstuff.com/sous-vide
 
 The following Arduino libraries are required to compile:
