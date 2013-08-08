@@ -197,7 +197,6 @@ void setup() {
   // start serial port
   Serial.begin(9600); 
   Serial.println("  ARDUINO CROCKPOT SOUS VIDE AND TIMER  "); 
-  delay(5);
   
   //Initialize PWM Timer
   windowStartTime = millis();
@@ -208,21 +207,17 @@ void setup() {
   Output = 0;
   
   Serial.println("Initializing Temperature Sensor");
-  delay(5);
   //Start Dallas Library and initialize temp sensor
   sensors.begin();
   isSensor = sensors.getAddress(tempDeviceAddress, 0);
   sensors.setWaitForConversion(false);  // async mode 
   if(isSensor) {
     Serial.print("Temperature Sensor Found: ");
-    delay(5);
     Serial.println(tempDeviceAddress[0]);
-    delay(5);
     sensors.setResolution(tempDeviceAddress, SENSOR_RESOLUTION);
     sensors.requestTemperatures();  // Send the command to get temperatures
   } else {
     Serial.println("No Temperature Sensor Found");  
-    delay(5);
   }
   tempTime = millis()+TEMP_TIME; // Set the timer to retrieve temps
   
