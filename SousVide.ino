@@ -1,10 +1,14 @@
 /*
-ARDUINO CROCKPOT SOUS VIDE AND TIMER v0.8.4
+ARDUINO CROCKPOT SOUS VIDE AND TIMER v0.9.0
 ===========================================
 Zan Hecht - 17 Mar 2013  
-http://zansstuff.com/sous-vide
+http://zansstuff.com/sous-vide */
 
-The following Arduino libraries are required to compile:
+#define VER_1 0
+#define VER_2 9
+#define VER_3 0
+
+/*The following Arduino libraries are required to compile:
 * TM1638.h: http://code.google.com/p/tm1638-library/
 * OneWire.h: http://www.pjrc.com/teensy/td_libs_OneWire.html
 * DallasTemperature.h: http://milesburton.com/Dallas_Temperature_Control_Library
@@ -14,7 +18,7 @@ Concept and original code inspired by the article "Turn your crock pot into a
 PID controlled sous vide cooker for $25" by andy@chiefmarley.com at
 http://chiefmarley.com/Arduino/?p=3
 
-PID settings for coffe urn and "aggressive mode" taken from the Ember source
+PID settings for coffee urn and "aggressive mode" taken from the Ember source
 code from Lower East Kitchen http://lowereastkitchen.com/wp/software/
 
 Temperature input via Dallas DS18B20 One-Wire temperature sensor. Datasheet at
@@ -45,16 +49,16 @@ INSTRUCTIONS
 
   Hit "MODE" to switch between modes. Modes are described below:
 
-### TIMER ("  ##.##.##")
+### ELAPSED TIME ("tinEr   ")
   
 > Timer counts hours, minutes, and seconds. By default, the crock pot is off.
 > * SET: Reset Time
 > * MINS DOWN: Reset Time
 > * HRS DOWN: Reset Time
-> * TEMP UP: Turn on crock-pot at 100%. Display will read (On##.##.##)
+> * TEMP UP: Turn on crock-pot at 100%. Display will read ("On##.##.##")
 > * TEMP DOWN: Turn off crock-pot
   
-### SOUS VIDE ("62.5°##.#°)
+### SOUS VIDE ("SOUSUIdE")
 > Sous Vide cooking mode. This mode can only be accessed when a temperature
 > sensor is detected at startup.
 >    
@@ -70,29 +74,35 @@ INSTRUCTIONS
 > * TEMP DOWN: Lower the setpoint by 0.5°
 > 
 > #### Settings:
-> > ##### TIMER ("t ##.##.##")  
+> > ##### SOUS VIDE TIMER ("S.U. tinEr")  
 > > Functions much like the TIMER mode above. Reset by using HRS DOWN or MINS
 > > DOWN.
 > > 
-> > ##### PROPORTIONAL ("Pro ####")  
+> > ##### PROPORTIONAL ("Proport. ")  
 > > Set the "P" coefficient in the PID loop. Use TEMP UP and TEMP DOWN to
 > > increase and decrease the coefficient by 100
 > > 
-> > ##### INTEGRAL ("Int ####")      
+> > ##### INTEGRAL ("IntEgrAL")      
 > > Set the "I" coefficient in the PID loop. Use TEMP UP and TEMP DOWN to
 > > increase and decrease the coefficient by 0.05
 > > 
-> > ##### DERIVATIVE ("dEr ####")      
+> > ##### DERIVATIVE ("dErIvAt. ")      
 > > Set the "D" coefficient in the PID loop. Use TEMP UP and TEMP DOWN to
 > > increase and decrease the coefficient by 1
+> > 
+> > ##### CALIBRATE TEMPERATURE ("CALibrAt.")
+> > Offset the reading from the temperature probe by the amount shown. Use 
+> > TEMP UP and TEMP DOWN to increase and decrease the offset by 0.1 degrees
+> > celsius. Calibration offset is saved to flash memory when you press SET.
   
-### COUNTDOWN TIMER ("CL##.##.##" or "CH##.##.##")
+### COOK AND HOLD("CrockPot")
 > Acts like the timer function on more expensive crock-pots. Cooks at full
 > power until the time runs out and then decreases the power to the equivalent
 > of the crock-pot WARM setting. As measured on my crock-pot, WARM is
 > approximately 30% of the crock-pot's HIGH setting and 40% of the crock-pot's
 > LOW setting. There is no need to start or stop the timer -- it is always
-> running.
+> running. The first two letters displayed indicate whether the Crockpot's knob
+> is set to High ("CL") or Low ("CL").
 >    
 > **IMPORTANT: YOU MUST SPECIFY WHETHER THE CROCKPOT'S KNOB IS SET TO HIGH ("CH")**
 > **OR LOW ("CL") OR THE KEEP WARM MODE MAY NOT KEEP YOUR FOOD HOT ENOUGH TO BE**
@@ -100,18 +110,33 @@ INSTRUCTIONS
 > **POT -- YOU MUST DO THAT YOURSELF WITH THE CROCK-POT'S KNOB.**
 >    
 > * SET: Toggle between "Crockpot on HIGH" ("CH") and "Crockpot on LOW" ("CL")
-> * HRS UP, HRS DOWN, MINS UP, MINS DOWN: Set the countdown timer time.
+> * HRS UP, HRS DOWN, MINS UP, MINS DOWN: Set the countdown timer time
 > * TEMP UP: Set to "Crockpot on HIGH" ("CH")
 > * TEMP DOWN: Set to "Crockpot on LOW" ("CL")
+
+### DELAYED START ("DELAY St.")
+> Turns the crockpot on to full power after the time runs out. There is no need
+> to start or stop the timer -- it is always running. Once the time elapses,
+> the Crockpot will stay on until more time is added, the controller is
+> unplugged, or the controller is switched to another mode such as SOUS VIDE or
+> ELAPSED TIME.
+> 
+> **WARNING: DO NOT USE THIS MODE WITH PERISHIBLE FOOD IN A THE CROCKPOT!**
+> **FOOD IN THE CROCKPOT CAN TAKE TWO OR THREE HOURS TO COME TO A SAFE**
+> **TEMPERATURE ONCE THE HEAT IS TURNED ON, MAKING IT EASY FOR THIS MODE TO**
+> **CAUSE FOOD TO SIT IN THE "DANGER ZONE" FOR TOO LONG.**
+>
+> * HRS UP, HRS DOWN: Adjust the hours until the crockpot starts
+> * MINS UP, MINS DOWN: Adjust the minutes until the crockpot starts
 */
 
 /*
 TM1638 Pinout
 GND  VCC
-DIO	CLK
-SB1	SB0
-SB3	SB2
-SB5	SB4
+DIO    CLK
+SB1    SB0
+SB3    SB2
+SB5    SB4
 
 By default, DI0-->8, CLK-->9, SB0-->7
 */
@@ -121,6 +146,7 @@ By default, DI0-->8, CLK-->9, SB0-->7
 #include <DallasTemperature.h>
 #include <PID_v1.h>
 #include <stdio.h>
+#include <EEPROM.h>
 
 // One-wire data wire is plugged into pin 2 on the Arduino
 #define ONE_WIRE_BUS 2
@@ -157,8 +183,8 @@ By default, DI0-->8, CLK-->9, SB0-->7
 #define CP_HIGH_PCT 1.00 // Percent Power for crockpot on 'High'. Should be 1.
 #define CP_LOW_PCT .708 // Percent Power for crockpot on 'Low'
 #define CP_WARM_PCT .295 // Percent Power for crockpot on 'Warm'
-
-
+// Time to display mode labels, in milliseconds
+#define LABEL_TIME 1250
 
 // Setup a oneWire instance to communicate with any OneWire devices
 OneWire oneWire(ONE_WIRE_BUS);
@@ -170,14 +196,16 @@ DeviceAddress tempDeviceAddress;
 // define a module on data pin 8, clock pin 9 and strobe pin 7
 TM1638 module(T1638_D, T1638_C, T1638_S); 
 
-//Define Variables we'll be connecting to
-double Setpoint, Input, Output;
+//Define and initialize variables we'll be connecting to
+double Setpoint = INITIAL_SET_POINT, Input = -127, Output = 0;
+
 //Specify the links and initial tuning parameters
 PID myPID(&Input, &Output, &Setpoint,INITIAL_KP,INITIAL_KI,INITIAL_KD,DIRECT);
 
 unsigned long serialTime; //this will help us know when to talk with processing
 unsigned long windowStartTime; //PWM Window start time
 unsigned long tempTime; //time to check the thermometer
+unsigned long keyTime; //When a settings or mode key was last pressed
 unsigned long tReset = 0; //Variable for resetting timer
 double tempReadings[TEMP_NUM_READINGS] = { 0 }; //Array of historical temps
 char tempIndex = 0; //Where to store the current temperature in the array
@@ -188,6 +216,7 @@ char highLow = 'L'; //For countdown timer, is crockpot on High or Low?
 byte ledDots = 0, mode=0, settings=0, onOff=0; 
 char temp_n=0, temp_n_max=20; //For temperature averaging
 bool isSensor=false; //Flag for determining if a sensor is connected
+byte tOff, oldTOff; //Temperature offset in tenths of a degree C relative to 127
 
 /********************************************
  *                  Setup                   *
@@ -198,15 +227,50 @@ void setup() {
   Serial.begin(9600); 
   Serial.println("  ARDUINO CROCKPOT SOUS VIDE AND TIMER  "); 
   
+  //Read from and initialize (if necessary) EEPROM
+  tOff = EEPROM.read(0);
+  byte byte1 = EEPROM.read(1);
+  byte byte2 = EEPROM.read(2);
+  byte byte42 = EEPROM.read(42);
+  //Check for signature of current version.
+  //Byte 0 is the calibration offset (27 to 227),
+  //Byte 1 is the first part of the version number,
+  //Byte 2 is the section part of the version number,
+  //Byte 42 should be set to 42.
+  if((tOff != 255) && (byte1 == VER_1) && (byte2 == VER_2) && (byte42 == 42)) {
+    Serial.print("EEPROM Signature Check OK: ");
+    Serial.print(tOff);
+    Serial.print(" ");
+    Serial.print(byte1);
+    Serial.print(" ");
+    Serial.print(byte2);
+    Serial.print(" ");
+    Serial.println(byte42);
+  } else {
+    Serial.print("EEPROM Signature Check FAILED: ");
+    Serial.print(tOff);
+    Serial.print(" ");
+    Serial.print(byte1);
+    Serial.print(" ");
+    Serial.print(byte2);
+    Serial.print(" ");
+    Serial.println(byte42);
+    Serial.print("Writing to EEPROM... ");
+    tOff=127;
+    EEPROM.write(0,127);
+    EEPROM.write(1,VER_1);
+    EEPROM.write(2,VER_2);
+    EEPROM.write(42,42);
+    Serial.println("DONE");
+  }
+  
+  //Sync olfTOff
+  oldTOff = tOff;
+  
   //Initialize PWM Timer
   windowStartTime = millis();
   
-  //Initialize PID Variables
-  Input = -127;
-  Setpoint = INITIAL_SET_POINT;
-  Output = 0;
-  
-  Serial.println("Initializing Temperature Sensor");
+  Serial.println("Initializing Temperature Sensor...");
   //Start Dallas Library and initialize temp sensor
   sensors.begin();
   isSensor = sensors.getAddress(tempDeviceAddress, 0);
@@ -242,8 +306,8 @@ void setup() {
 
 void loop() {
   
-  // Poll temp sensor every TEMP_TIME milliseconds 
-  if(millis()>tempTime && isSensor) Input = getTemps();
+  // Poll temp sensor every TEMP_TIME milliseconds and apply calibration offset
+  if(millis()>tempTime && isSensor) Input = getTemps() + (double)(tOff-127)/10;
   
   //Call PID Function.
   //Most of the time it will just return without doing anything.
@@ -266,11 +330,13 @@ void loop() {
   //Switch settings and modes
   if (keys == 0b10000000) {
     delay(250);
-    if (settings < 4) settings++;
+    keyTime = millis();
+    if (settings < 5) settings++;
     else settings = 0;
   } else if (keys == 0b01000000) {
     delay(250);
-    if (mode < 2) mode++;
+    keyTime = millis();
+    if (mode < 3) mode++;
     else mode = 0;
     settings = 0;
   }
@@ -293,6 +359,10 @@ void loop() {
   if(mode == 0) doTimer(keys); //Simple time-elapsed Mode with crockpot off.
     else if(mode == 1) doSousVide(keys);  // Sous Vide Mode
     else if(mode == 2) doCountdown(keys); // Countdown Timer
+    else if(mode == 3) doDelayStart(keys); // Delayed Start
+    
+  //Display label if mode recently switched
+  if ((now - keyTime) < LABEL_TIME) doLabel(mode, settings);
   
   //write to display
   //Serial.println(dispStr);
@@ -328,11 +398,33 @@ double getTemps() {
     return tempTotal / TEMP_NUM_READINGS; //Average the temperature array to get the running average
 }
 
+//Display mode label
+void doLabel(byte mode, byte settings) {
+  if(mode == 0) {
+    sprintf(dispStr,"tinEr   "); //Elapsed Time
+    ledDots=0b00000000;
+  } else if(mode == 1) {
+    if(settings==0) {sprintf(dispStr,"SOUSUIdE"); ledDots=0b00000000;} // Sous Vide Mode
+      else if(settings==1) {sprintf(dispStr,"SU tinEr"); ledDots=0b11000000;} //Elapsed Sous Vide Time
+      else if(settings==2) {sprintf(dispStr,"Proport "); ledDots=0b00000010;} //Set Proportional Coefficient
+      else if(settings==3) {sprintf(dispStr,"IntEgrAL"); ledDots=0b00000000;} //Set Integral Coefficient
+      else if(settings==4) {sprintf(dispStr,"dEriuAt "); ledDots=0b00000010;} //Set Derivative Coefficient
+      else if(settings==5) {sprintf(dispStr,"CALibrAt"); ledDots=0b00000001;} //Set temperature offset
+  } else if(mode == 2) {
+    sprintf(dispStr,"CrockPot"); // Cooking Time
+    ledDots=0b00000000;
+  } else if(mode == 3) {
+    sprintf(dispStr,"DELAY St"); // Delayed Start
+    ledDots=0b00000001;
+  }
+}
+
 //Simple time-elapsed Mode with crockpot off.
 void doTimer(byte keys) {
+    unsigned long now = millis();
     myPID.SetMode(MANUAL); //Turn PID off
-    unsigned long tTime = (millis() - tReset)/1000; //Get time in seconds
-    if(keys & 0b10010100) tReset = millis(); //reset if any time down or the Set button is pushed
+    unsigned long tTime = (now - tReset)/1000; //Get elapsed time in seconds
+    if(keys & 0b10010100) tReset = now; //reset if any time down or the Set button is pushed
     if(keys == 0b00000010) onOff = 1; //Turn on crockpot if Temperature Up button is pushed
       else if(keys == 0b00000001) onOff = 0; //Turn off crockpot if Temperature Down button is pushed
     // Calculate hours, minutes, and seconds
@@ -351,25 +443,37 @@ void doTimer(byte keys) {
 
 //Sous Vide Mode
 void doSousVide(byte keys) {
+  //Read in current pid tunings
+  double p, i, d;
+  p = myPID.GetKp();
+  i = myPID.GetKi();
+  d = myPID.GetKd();
+  
+  if(settings == 0) { //Temperature Display
+    sprintf(dispStr,"---*---*\n");
+    ledDots = 0b00000000;
+    
+    //Write new tOff to EEPROM if necessary
+    if (tOff != oldTOff) {
+      EEPROM.write(0,tOff);
+      oldTOff = tOff;
+      Serial.print("Updating EEPROM byte 0: ");
+      Serial.println(tOff);
+    }
+    
+  } else if(settings==1) setTimer(keys); //Timer
+    else if(settings==2) p=setPro(keys, p); //Set Proportional Coefficient
+    else if(settings==3) i=setInt(keys, i); //Set Integral Coefficient
+    else if(settings==4) d=setDer(keys, d); //Set Derivative Coefficient
+    else if(settings==5) tOff=setCal(keys, tOff); //Set temperature offset
+  if(settings>=2 && settings<=4) myPID.SetTunings(p, i, d); //Set tunings if in p, i, or d mode
+
   if(isSensor && Input > 0) { // Is there a sensor and valid temperature data?
     myPID.SetMode(AUTOMATIC); //Turn PID on once valid temperature data exists
-    //Read in current pid tunings
-    double p, i, d;
-    p = myPID.GetKp();
-    i = myPID.GetKi();
-    d = myPID.GetKd();
-    
     if(settings == 0) setSousVide(keys); //Temperature Display
-      else if(settings==1) setTimer(keys); //Timer
-      else if(settings==2) p=setPro(keys, p); //Set Proportional Coefficient
-      else if(settings==3) i=setInt(keys, i); //Set Integral Coefficient
-      else if(settings==4) d=setDer(keys, d); //Set Derivative Coefficient
-    if(settings>=2) myPID.SetTunings(p, i, d); //Set tunings if in p, i, or d mode
-  } else { //Bypass Sous Vide mode if no sensor or valid data
-    sprintf(dispStr,"---*---*\n");
-    ledDots = 0b00000000;  
   }
 }
+
 
 // Countdown Timer
 void doCountdown(byte keys) {
@@ -405,6 +509,31 @@ void doCountdown(byte keys) {
   ledDots = 0b00010100;
 }
 
+// Delayed Start
+void doDelayStart(byte keys) {
+  myPID.SetMode(MANUAL); //Turn PID off
+  long tempTime = (long)millis();
+  long cTime = countDn - tempTime;
+  if (cTime < 0) cTime = 0;
+  long cMs = cTime % 1000;
+  long cSec = (cTime/1000) % 60;
+  long cMin = (cTime / 60000) % 60;
+  long cHr = cTime / 3600000;
+  if        (keys == 0b00001000) cHr = (cHr+1)%24; //Hour Up
+    else if (keys == 0b00000100) cHr = (cHr-1)%24; //Hour Down
+    else if (keys == 0b00100000) cMin = (cMin+1); //Min Up
+    else if (keys == 0b00010000) cMin = (cMin-1); //Min Down 
+      
+  sprintf(dispStr,"dL%02hi%02hi%02hi\n",(int)cHr,(int)cMin,(int)cSec);
+    
+  cTime = (cHr*3600000)+(cMin*60000)+(cSec*1000)+cMs;
+  countDn = cTime + tempTime;
+  
+  if (cTime > 500) Output = 0;
+    else Output = 8000;
+    
+  ledDots = 0b00010100;
+}
 /********************************************
  *          Sous Vide Settings Modes        *
  ********************************************/
@@ -415,13 +544,12 @@ void setSousVide(byte keys) { //Temperature Display
       sprintf(dispStr,"%3hi%3hi\n",(int)(sensors.toFahrenheit(Setpoint)*10),(int)(sensors.toFahrenheit(Input)*10));
       */  
       // display Celsius formatted temperatures
-      if(Input>=0) sprintf(dispStr,"%d*%d*\n",(int)((Setpoint*10)+0.5),(int)((Input*10)+0.5));
-        else sprintf(dispStr,"---*---*\n");
+      sprintf(dispStr,"%d*%d*\n",(int)((Setpoint*10)+0.5),(int)((Input*10)+0.5));
+      ledDots = 0b01000100; //Set decimal points in temperatures
+
       //Process Buttons
       if ((keys == 0b00000010) && (Setpoint <= 99)) Setpoint=Setpoint+0.5; //Setpoint Up
         else if ((keys == 0b00000001) && (Setpoint >= 10.0)) Setpoint=Setpoint-0.5; //Setpoint Down
-          // Output led dots
-      ledDots = 0b01000100; //Set decimal points in temperatures
 }
 
 void setTimer(byte keys) { //Timer
@@ -436,30 +564,42 @@ void setTimer(byte keys) { //Timer
 
 double setPro(byte keys, double p) { //Set Proportional Coefficient
       sprintf(dispStr,"Pro %4hi\n",(int)p);
-      //Process Buttons
-      if ((keys == 0b00000010) && (p  < 9900)) p=p+100; //Increase coefficient
-        else if ((keys == 0b00000001) && (p >= 100)) p=p-100; //Decrease coefficient
       ledDots = 0b00000000;
+      //Process Buttons
+      if ((keys == 0b00000010) && (p  < 9900)) p+=100; //Increase coefficient
+        else if ((keys == 0b00000001) && (p >= 100)) p-=100; //Decrease coefficient
       return p;
 }
 
 double setInt(byte keys, double i) { //Set Integral Coefficient
       sprintf(dispStr,"Int %4hi\n",(int)((i*100)+0.5));  
-      //Process Buttons
-      if ((keys == 0b00000010) && (i  < 99.95)) i=i+0.05; //Increase coefficient
-        else if ((keys == 0b00000001) && (i >= 0.05)) i=i-0.05; //Decrease coefficient
       ledDots = 0b00000100;
+      //Process Buttons
+      if ((keys == 0b00000010) && (i  < 99.95)) i+=0.05; //Increase coefficient
+        else if ((keys == 0b00000001) && (i >= 0.05)) i-=0.05; //Decrease coefficient
       return i;
 }
 
 double setDer(byte keys, double d) { //Set Derivative Coefficient
       sprintf(dispStr,"dEr %4hi\n",(int)d);
+      ledDots = 0b00000000;
       //Process Buttons
       if ((keys == 0b00000010) && (d  < 9999)) d++; //Increase coefficient
         else if ((keys == 0b00000001) && (d >= 1)) d--; //Decrease coefficient
-      ledDots = 0b00000000;
+      
       return d;
 }
+
+double setCal(byte keys, byte cal) { //Set temp sensor calibration
+    sprintf(dispStr,"CAL  %+03hi\n", (int)cal-127);
+    ledDots = 0b00000010;
+    //Process Buttons
+    if ((keys == 0b00000010) && (cal < 226)) cal+=1; //Increase temp offset
+      else if ((keys == 0b00000001) && (cal > 28)) cal-=1; //Decrease temp offset
+    return cal;
+}
+      
+    
 
 /********************************************
  * Serial Communication functions / helpers *
@@ -594,10 +734,11 @@ CHANGELOG
 * 0.7 First Public Release  
   * 0.7.1 Fixed typo in instructions  
   * 0.7.2 Simplified code to output to LED bar  
-* 0.8 Change to use Celcius internally, fixed temp sensor polling, added moving average for temperature, added "aggressive mode"  
+* 0.8 Change to use Celsius internally, fixed temp sensor polling, added moving average for temperature, added "aggressive mode"  
   * 0.8.1 Split code into functions. Skip sous vide mode if temperature sensor is missing. Tweaked aggressive mode.
   * 0.8.2 Formatted instructions with Markdown
   * 0.8.3 Bug Fixes
   * 0.8.4 Changed aggressive mode I parameter to 0 to reduce overshoot.
+* 0.9 Add mode labels, delayed start, and calibration
 */
 
