@@ -90,7 +90,7 @@ INSTRUCTIONS
 > > TEMP UP and TEMP DOWN to increase and decrease the offset by 0.1 degrees
 > > celsius. Calibration offset is saved to flash memory when you press SET.
   
-### COOK AND HOLD("CrockPot")
+### COOK AND HOLD ("CrockPot")
 > Acts like the timer function on more expensive crock-pots. Cooks at full
 > power until the time runs out and then decreases the power to the equivalent
 > of the crock-pot WARM setting. As measured on my crock-pot, WARM is
