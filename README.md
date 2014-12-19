@@ -1,4 +1,4 @@
-ARDUINO CROCKPOT SOUS VIDE AND TIMER v0.8.4
+ARDUINO CROCKPOT SOUS VIDE AND TIMER v0.9.0
 ===========================================
 Zan Hecht - 17 Mar 2013  
 http://zansstuff.com/sous-vide
@@ -44,16 +44,16 @@ INSTRUCTIONS
 
   Hit "MODE" to switch between modes. Modes are described below:
 
-### TIMER ("  ##.##.##")
+### ELAPSED TIME ("tinEr   ")
   
 > Timer counts hours, minutes, and seconds. By default, the crock pot is off.
 > * SET: Reset Time
 > * MINS DOWN: Reset Time
 > * HRS DOWN: Reset Time
-> * TEMP UP: Turn on crock-pot at 100%. Display will read (On##.##.##)
+> * TEMP UP: Turn on crock-pot at 100%. Display will read ("On##.##.##")
 > * TEMP DOWN: Turn off crock-pot
   
-### SOUS VIDE ("62.5°##.#°)
+### SOUS VIDE ("SOUSUIdE")
 > Sous Vide cooking mode. This mode can only be accessed when a temperature
 > sensor is detected at startup.
 >    
@@ -69,29 +69,35 @@ INSTRUCTIONS
 > * TEMP DOWN: Lower the setpoint by 0.5°
 > 
 > #### Settings:
-> > ##### TIMER ("t ##.##.##")  
+> > ##### SOUS VIDE TIMER ("S.U. tinEr")  
 > > Functions much like the TIMER mode above. Reset by using HRS DOWN or MINS
 > > DOWN.
 > > 
-> > ##### PROPORTIONAL ("Pro ####")  
+> > ##### PROPORTIONAL ("Proport. ")  
 > > Set the "P" coefficient in the PID loop. Use TEMP UP and TEMP DOWN to
 > > increase and decrease the coefficient by 100
 > > 
-> > ##### INTEGRAL ("Int ####")      
+> > ##### INTEGRAL ("IntEgrAL")      
 > > Set the "I" coefficient in the PID loop. Use TEMP UP and TEMP DOWN to
 > > increase and decrease the coefficient by 0.05
 > > 
-> > ##### DERIVATIVE ("dEr ####")      
+> > ##### DERIVATIVE ("dErIvAt. ")      
 > > Set the "D" coefficient in the PID loop. Use TEMP UP and TEMP DOWN to
 > > increase and decrease the coefficient by 1
+> > 
+> > ##### CALIBRATE TEMPERATURE ("CALibrAt.")
+> > Offset the reading from the temperature probe by the amount shown. Use 
+> > TEMP UP and TEMP DOWN to increase and decrease the offset by 0.1 degrees
+> > celsius. Calibration offset is saved to flash memory when you press SET.
   
-### COUNTDOWN TIMER ("CL##.##.##" or "CH##.##.##")
+### COOK AND HOLD("CrockPot")
 > Acts like the timer function on more expensive crock-pots. Cooks at full
 > power until the time runs out and then decreases the power to the equivalent
 > of the crock-pot WARM setting. As measured on my crock-pot, WARM is
 > approximately 30% of the crock-pot's HIGH setting and 40% of the crock-pot's
 > LOW setting. There is no need to start or stop the timer -- it is always
-> running.
+> running. The first two letters displayed indicate whether the Crockpot's knob
+> is set to High ("CL") or Low ("CL").
 >    
 > **IMPORTANT: YOU MUST SPECIFY WHETHER THE CROCKPOT'S KNOB IS SET TO HIGH ("CH")**
 > **OR LOW ("CL") OR THE KEEP WARM MODE MAY NOT KEEP YOUR FOOD HOT ENOUGH TO BE**
@@ -99,9 +105,25 @@ INSTRUCTIONS
 > **POT -- YOU MUST DO THAT YOURSELF WITH THE CROCK-POT'S KNOB.**
 >    
 > * SET: Toggle between "Crockpot on HIGH" ("CH") and "Crockpot on LOW" ("CL")
-> * HRS UP, HRS DOWN, MINS UP, MINS DOWN: Set the countdown timer time.
+> * HRS UP, HRS DOWN, MINS UP, MINS DOWN: Set the countdown timer time
 > * TEMP UP: Set to "Crockpot on HIGH" ("CH")
 > * TEMP DOWN: Set to "Crockpot on LOW" ("CL")
+
+### DELAYED START ("DELAY St.")
+> Turns the crockpot on to full power after the time runs out. There is no need
+> to start or stop the timer -- it is always running. Once the time elapses,
+> the Crockpot will stay on until more time is added, the controller is
+> unplugged, or the controller is switched to another mode such as SOUS VIDE or
+> ELAPSED TIME.
+> 
+> **WARNING: DO NOT USE THIS MODE WITH PERISHIBLE FOOD IN A THE CROCKPOT!**
+> **FOOD IN THE CROCKPOT CAN TAKE TWO OR THREE HOURS TO COME TO A SAFE**
+> **TEMPERATURE ONCE THE HEAT IS TURNED ON, MAKING IT EASY FOR THIS MODE TO**
+> **CAUSE FOOD TO SIT IN THE "DANGER ZONE" FOR TOO LONG.**
+>
+> * HRS UP, HRS DOWN: Adjust the hours until the crockpot starts
+> * MINS UP, MINS DOWN: Adjust the minutes until the crockpot starts
+
 
 Copyright
 ---------
@@ -150,8 +172,9 @@ CHANGELOG
 * 0.7 First Public Release  
   * 0.7.1 Fixed typo in instructions  
   * 0.7.2 Simplified code to output to LED bar  
-* 0.8 Change to use Celcius internally, fixed temp sensor polling, added moving average for temperature, added "aggressive mode"  
+* 0.8 Change to use Celsius internally, fixed temp sensor polling, added moving average for temperature, added "aggressive mode"  
   * 0.8.1 Split code into functions. Skip sous vide mode if temperature sensor is missing. Tweaked aggressive mode.
   * 0.8.2 Formatted instructions with Markdown
   * 0.8.3 Bug Fixes
   * 0.8.4 Changed aggressive mode I parameter to 0 to reduce overshoot.
+* 0.9 Add mode labels, delayed start, and calibration
