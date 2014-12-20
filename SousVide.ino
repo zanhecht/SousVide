@@ -1,7 +1,7 @@
 /*
 ARDUINO CROCKPOT SOUS VIDE AND TIMER v0.9.0
 ===========================================
-Zan Hecht - 17 Mar 2013  
+Zan Hecht - 19 Dec 2014
 http://zansstuff.com/sous-vide */
 
 #define VER_1 0
