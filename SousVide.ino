@@ -1,7 +1,7 @@
 /*
 ARDUINO SOUS VIDE AND CROCKPOT CONTROLLER v1.0.0
-== == == == == == == == == == == == == == == == == == == == == =
-Zan Hecht - 20 Nov 2016
+================================================
+Zan Hecht - 11 Dec 2016
 http://zansstuff.com/sous-vide */
 
 #define VER_1 1
