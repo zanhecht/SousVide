@@ -41,7 +41,7 @@ INSTRUCTIONS
 
 Key assignments on the TM1638 are as follows (LSB to MSB):
 
-  TEMP DOWN | TEMP UP | HRS DOWN | HOURS UP | MINS DOWN | MINS UP | MODE | SET
+TEMP DOWN | TEMP UP | HRS DOWN | HOURS UP | MINS DOWN | MINS UP | MODE | SET
 
 LEDs show the power being applied to the crock-pot via PWM. 8 LEDs = 100%, no
 LEDs = 0%. If the LEDs are red, the relay is on. If the LEDs are green, the
@@ -278,555 +278,556 @@ bool isSensor=false; //Flag for determining if a sensor is connected
 int cpPercent=CP_ADJ_PCT; //Crockpot temperature scaling factor for non-Sous Vide
 byte tOff, oldTOff; //Temperature Calibration Offset
 
-/********************************************
-*                   Setup                   *
-********************************************/
+/**********************************************
+*                    Setup                    *
+**********************************************/
 
 void setup() {
-  // start serial port
-  Serial.begin(9600); 
-  Serial.println(F("ARDUINO SOUS VIDE AND CROCKPOT CONTROLLER"));
-  Serial.print(F("              VERSION "));
-  Serial.print(VER_1); Serial.print(F("."));
-  Serial.print(VER_2); Serial.print(F("."));
-  Serial.print(VER_3); Serial.println(F("              \n"));
+	// start serial port
+	Serial.begin(9600); 
+	Serial.println(F("ARDUINO SOUS VIDE AND CROCKPOT CONTROLLER"));
+	Serial.print(F("              VERSION "));
+	Serial.print(VER_1); Serial.print(F("."));
+	Serial.print(VER_2); Serial.print(F("."));
+	Serial.print(VER_3); Serial.println(F("              \n"));
 
-  //Read from and initialize (if necessary) EEPROM
-  tOff = EEPROM.read(0);
-  oldTOff = tOff;
-  //Check for signature of current version.
-  //Byte 0 is the calibration offset (27 to 227),
-  //Byte 1 is the first part of the version number,
-  //Byte 2 is the section part of the version number,
-  //Byte 42 should be set to 42.
-  if((tOff != 255) && (EEPROM.read(1) == VER_1)
-  && (EEPROM.read(2) == VER_2) && (EEPROM.read(42) == 42)) {
-    Serial.print(F("EEPROM Signature Check OK: "));
-    Serial.print(tOff);
-    SerialSpace();
-    Serial.print(EEPROM.read(1));
-    SerialSpace();
-    Serial.print(EEPROM.read(2));
-    SerialSpace();
-    Serial.println(EEPROM.read(42));
-  } else {
-    Serial.print(F("EEPROM Signature Check FAILED: "));
-    Serial.print(tOff);
-    SerialSpace();
-    Serial.print(EEPROM.read(1));
-    SerialSpace();
-    Serial.print(EEPROM.read(2));
-    SerialSpace();
-    Serial.println(EEPROM.read(42));
-    Serial.print(F("Writing to EEPROM... "));
-    tOff=127;
-    oldTOff=tOff;
-    EEPROM.write(0,tOff);
-    EEPROM.write(1,VER_1);
-    EEPROM.write(2,VER_2);
-    EEPROM.write(42,42);
-    Serial.println(F("DONE"));
-  }
+	//Read from and initialize (if necessary) EEPROM
+	tOff = EEPROM.read(0);
+	oldTOff = tOff;
+	//Check for signature of current version.
+	//Byte 0 is the calibration offset (27 to 227),
+	//Byte 1 is the first part of the version number,
+	//Byte 2 is the section part of the version number,
+	//Byte 42 should be set to 42.
+	if((tOff != 255) && (EEPROM.read(1) == VER_1)
+			&& (EEPROM.read(2) == VER_2) && (EEPROM.read(42) == 42)) {
+		Serial.print(F("EEPROM Signature Check OK: "));
+		Serial.print(tOff);
+		SerialSpace();
+		Serial.print(EEPROM.read(1));
+		SerialSpace();
+		Serial.print(EEPROM.read(2));
+		SerialSpace();
+		Serial.println(EEPROM.read(42));
+	} else {
+		Serial.print(F("EEPROM Signature Check FAILED: "));
+		Serial.print(tOff);
+		SerialSpace();
+		Serial.print(EEPROM.read(1));
+		SerialSpace();
+		Serial.print(EEPROM.read(2));
+		SerialSpace();
+		Serial.println(EEPROM.read(42));
+		Serial.print(F("Writing to EEPROM... "));
+		tOff=127;
+		oldTOff=tOff;
+		EEPROM.write(0,tOff);
+		EEPROM.write(1,VER_1);
+		EEPROM.write(2,VER_2);
+		EEPROM.write(42,42);
+		Serial.println(F("DONE"));
+	}
 
 
 
-  //Initialize PWM Timer
-  windowStartTime = millis();
+	//Initialize PWM Timer
+	windowStartTime = millis();
 
-  Serial.println(F("Initializing Temperature Sensor..."));
-  //Start Dallas Library and initialize temp sensor
-  sensors.begin();
-  isSensor = sensors.getAddress(tempDeviceAddress, 0);
-  sensors.setWaitForConversion(false);  // async mode 
-  if(isSensor) {
-    Serial.print(F("Temperature Sensor Found: ")); Serial.println(tempDeviceAddress[0]);
-    sensors.setResolution(tempDeviceAddress, SENSOR_RESOLUTION);
-    sensors.requestTemperatures();  // Send the command to get temperatures
-  } else {
-    Serial.println(F("No Temperature Sensor Found"));  
-  }
-  tempTime = millis()+TEMP_TIME; // Set the timer to retrieve temps
+	Serial.println(F("Initializing Temperature Sensor..."));
+	//Start Dallas Library and initialize temp sensor
+	sensors.begin();
+	isSensor = sensors.getAddress(tempDeviceAddress, 0);
+	sensors.setWaitForConversion(false);  // async mode 
+	if(isSensor) {
+		Serial.print(F("Temperature Sensor Found: ")); Serial.println(tempDeviceAddress[0]);
+		sensors.setResolution(tempDeviceAddress, SENSOR_RESOLUTION);
+		sensors.requestTemperatures();  // Send the command to get temperatures
+	} else {
+		Serial.println(F("No Temperature Sensor Found"));  
+	}
+	tempTime = millis()+TEMP_TIME; // Set the timer to retrieve temps
 
-  //Initialize PID
-  myPID.SetOutputLimits(0, WINDOW_SIZE*1000); //set PID output to correct range
-  myPID.SetSampleTime(TEMP_TIME); //set sample time in milliseconds
+	//Initialize PID
+	myPID.SetOutputLimits(0, WINDOW_SIZE*1000); //set PID output to correct range
+	myPID.SetSampleTime(TEMP_TIME); //set sample time in milliseconds
 
-  //turn on display to brightness 0 (0-7)
-  module.setupDisplay(true, 0);
+	//turn on display to brightness 0 (0-7)
+	module.setupDisplay(true, 0);
 
-  //activate relay pin as an output
-  digitalWrite(TRIGGER_PIN, LOW);   // sets the relay off
-  pinMode(TRIGGER_PIN, OUTPUT);
+	//activate relay pin as an output
+	digitalWrite(TRIGGER_PIN, LOW);   // sets the relay off
+	pinMode(TRIGGER_PIN, OUTPUT);
 
-  Serial.println(F("Controller Ready\n"));
-  delay(5);
+	Serial.println(F("Controller Ready\n"));
+	delay(5);
 }
 
-/********************************************
-*                   Loop                    *
-********************************************/
+/**********************************************
+*                    Loop                     *
+**********************************************/
 
 void loop() {
-  // Record current time 
-  unsigned long now = millis();
+	// Record current time 
+	unsigned long now = millis();
 
-  //Register button presses
-  byte keys = 0;
-  if(now - keyTime > DEBOUNCE_TIME) {
-    keys = module.getButtons();
-    if(keys){
-      keyTime = now;
-      switch (keys) { //Switch settings and modes
-      case 0b10000000:
-        if ((mode == 1 && settings < 5) 
-        || (mode == 4 && settings < 2) 
-        || (mode != 1 && mode != 4 && settings < 1)) {
-          settings++;
-        } else {
-          settings = 0;
-        }
-        labelTime = now;
-        break;
-      case 0b01000000:
-        if (mode < 4) {
-          mode++;
-        } else {
-          mode = 0;
-        }
-        settings = 0;
-        labelTime = now;
-        break;
-      }
-    }
-  }
+	//Register button presses
+	byte keys = 0;
+	if(now - keyTime > DEBOUNCE_TIME) {
+		keys = module.getButtons();
+		if(keys){
+			keyTime = now;
+			switch (keys) { //Switch settings and modes
+			case 0b10000000:
+				if ((mode == 1 && settings < 5) 
+						|| (mode == 4 && settings < 2) 
+						|| (mode != 1 && mode != 4 && settings < 1)) {
+					settings++;
+				} else {
+					settings = 0;
+				}
+				labelTime = now;
+				break;
+			case 0b01000000:
+				if (mode < 4) {
+					mode++;
+				} else {
+					mode = 0;
+				}
+				settings = 0;
+				labelTime = now;
+				break;
+			}
+		}
+	}
 
-  // Calculate output mapping to LEDs
-  word outToLed = (1 << (char)((Output/1000) +0.5)) - 1;
+	// Calculate output mapping to LEDs
+	word outToLed = (1 << (char)((Output/1000) +0.5)) - 1;
 
-  // Poll temp sensor every TEMP_TIME milliseconds and apply calibration offset
-  if(now>tempTime && isSensor) Input = getTemps() + (double)(tOff-127)/10;
+	// Poll temp sensor every TEMP_TIME milliseconds and apply calibration offset
+	if(now>tempTime && isSensor) Input = getTemps() + (double)(tOff-127)/10;
 
-  //Call PID Function.
-  //Most of the time it will just return without doing anything.
-  //At a frequency specified by SetSampleTime it will calculate a new Output. 
-  if ((abs(Setpoint-Input)>=AGR_INT)) { //Check for "aggressive mode"
-    double p, i, d; //Read current tuning
-    p = myPID.GetKp();
-    i = myPID.GetKi();
-    d = myPID.GetKd();
-    myPID.SetTunings(AGR_KP, AGR_KI, AGR_KD); //Set aggressive mode tunings
-    myPID.Compute(); //Call PID Function.
-    myPID.SetTunings(p, i, d); //Restore old tunings
-  } else {
-    myPID.Compute(); //Call PID Function.
-  }
+	//Call PID Function.
+	//Most of the time it will just return without doing anything.
+	//At a frequency specified by SetSampleTime it will calculate a new Output. 
+	if ((abs(Setpoint-Input)>=AGR_INT)) { //Check for "aggressive mode"
+		double p, i, d; //Read current tuning
+		p = myPID.GetKp();
+		i = myPID.GetKi();
+		d = myPID.GetKd();
+		myPID.SetTunings(AGR_KP, AGR_KI, AGR_KD); //Set aggressive mode tunings
+		myPID.Compute(); //Call PID Function.
+		myPID.SetTunings(p, i, d); //Restore old tunings
+	} else {
+		myPID.Compute(); //Call PID Function.
+	}
 
-  //turn the output pin on/off based on pid output
-  //If one PWM time window has ended, it's time to shift the window
-  if((now - windowStartTime)>(WINDOW_SIZE * 1000)) windowStartTime += (WINDOW_SIZE * 1000); 
-  if(Output > now - windowStartTime) { //Turn on relay during "on" period
-    digitalWrite(TRIGGER_PIN,HIGH); 
-  } else {//Turn off relay
-    digitalWrite(TRIGGER_PIN,LOW);
-    outToLed = outToLed << 8; //Shift LED bar to make LEDs green
-  }
+	//turn the output pin on/off based on pid output
+	//If one PWM time window has ended, it's time to shift the window
+	if((now - windowStartTime)>(WINDOW_SIZE * 1000)) windowStartTime += (WINDOW_SIZE * 1000); 
+	if(Output > now - windowStartTime) { //Turn on relay during "on" period
+		digitalWrite(TRIGGER_PIN,HIGH); 
+	} else {//Turn off relay
+		digitalWrite(TRIGGER_PIN,LOW);
+		outToLed = outToLed << 8; //Shift LED bar to make LEDs green
+	}
 
-  //Determine which mode we are in and perform the appropriate actions
-  switch (mode) {
-  case 0:
-    doTimer(keys); break; //Simple time-elapsed Mode with crockpot off.
-  case 1:
-    doSousVide(keys); break; // Sous Vide Mode
-  case 2:
-    doCountdown(keys); break; // Countdown Timer
-  case 3:
-    doDelayStart(keys); break; // Delayed Start
-  case 4:
-    doDoneTemp(keys); break; // Cook to Temperature
-  }
+	//Determine which mode we are in and perform the appropriate actions
+	switch (mode) {
+	case 0:
+		doTimer(keys); break; //Simple time-elapsed Mode with crockpot off.
+	case 1:
+		doSousVide(keys); break; // Sous Vide Mode
+	case 2:
+		doCountdown(keys); break; // Countdown Timer
+	case 3:
+		doDelayStart(keys); break; // Delayed Start
+	case 4:
+		doDoneTemp(keys); break; // Cook to Temperature
+	}
 
-  //Display label if mode recently switched
-  if ((now - labelTime) < LABEL_TIME) {
-    doLabel();
-    if(SERIAL_ENABLE && (labelTime == now)) {
-      Serial.print(F("Mode: ")); Serial.print(mode);
-      Serial.print(F("; Settings: ")); Serial.println(settings);
-    }
-  }
+	//Display label if mode recently switched
+	if ((now - labelTime) < LABEL_TIME) {
+		doLabel();
+		if(SERIAL_ENABLE && (labelTime == now)) {
+			Serial.print(F("Mode: ")); Serial.print(mode);
+			Serial.print(F("; Settings: ")); Serial.println(settings);
+		}
+	}
 
-  //write to display
-  //Serial.println(dispStr);
-  module.setDisplayToString(dispStr,ledDots);
-  module.setLEDs(outToLed);
+	//write to display
+	//Serial.println(dispStr);
+	module.setDisplayToString(dispStr,ledDots);
+	module.setLEDs(outToLed);
 
-  //send-receive with processing if it's time
-  if(millis()>serialTime && SERIAL_ENABLE && mode==1) {
-    SerialReceive();
-    SerialSend();
-    serialTime+=(TEMP_TIME*10);
-  }
+	//send-receive with processing if it's time
+	if(millis()>serialTime && SERIAL_ENABLE && mode==1) {
+		SerialReceive();
+		SerialSend();
+		serialTime+=(TEMP_TIME*10);
+	}
 
 }
 
-/********************************************
-*          Input/Output Functions           *
-********************************************/
+/**********************************************
+*           Input/Output Functions            *
+**********************************************/
 
 // Query temp sensor, perform a running average, and send request for next poll 
 double getTemps() {
-  tempTotal -= tempReadings[tempIndex]; //subtract oldest temperature from running total
-  tempReadings[tempIndex] = sensors.getTempC(tempDeviceAddress); //read sensor at tempDeviceAddress
-  tempTotal += tempReadings[tempIndex]; //add reading to running total
-  tempIndex++; //Advance to the next slot in the array for averaging
-  if (tempIndex>=TEMP_NUM_READINGS) tempIndex=0; //Wrap around if at end of array
+	tempTotal -= tempReadings[tempIndex]; //subtract oldest temperature from running total
+	tempReadings[tempIndex] = sensors.getTempC(tempDeviceAddress); //read sensor at tempDeviceAddress
+	tempTotal += tempReadings[tempIndex]; //add reading to running total
+	tempIndex++; //Advance to the next slot in the array for averaging
+	if (tempIndex>=TEMP_NUM_READINGS) tempIndex=0; //Wrap around if at end of array
 
-  sensors.setResolution(tempDeviceAddress, SENSOR_RESOLUTION); //Set resolution again for safety
-  sensors.requestTemperatures(); //Send the command to request temperatures
-  tempTime = millis()+TEMP_TIME; //Increment timer to retrieve temps
+	sensors.setResolution(tempDeviceAddress, SENSOR_RESOLUTION); //Set resolution again for safety
+	sensors.requestTemperatures(); //Send the command to request temperatures
+	tempTime = millis()+TEMP_TIME; //Increment timer to retrieve temps
 
-  return tempTotal / TEMP_NUM_READINGS; //Average the temperature array to get the running average
+	return tempTotal / TEMP_NUM_READINGS; //Average the temperature array to get the running average
 }
 
 //Display mode label
 void doLabel() {
-  switch (mode) {
-  case 0:
-    switch (settings) {
-    case 0:
-      sprintf(dispStr,"tinEr   "); ledDots=0b00000000; break; //Elapsed Time
-    case 1:
-      sprintf(dispStr,"PErcEnt "); ledDots=0b00000000; break; // Set Cooking Percent
-    }
-    break;
-  case 1:
-    switch (settings) {
-    case 0:
-      sprintf(dispStr,"SOUSUIdE"); ledDots=0b00000000; break; //Sous Vide Mode
-    case 1:
-      sprintf(dispStr,"SU tinEr"); ledDots=0b11000000; break; //Elapsed Sous Vide Time
-    case 2:
-      sprintf(dispStr,"Proport "); ledDots=0b00000010; break; //Set Proportional Coefficient
-    case 3:
-      sprintf(dispStr,"IntEgrAL"); ledDots=0b00000000; break; //Set Integral Coefficient
-    case 4:
-      sprintf(dispStr,"dEriuAt "); ledDots=0b00000010; break; //Set Derivative Coefficient
-    case 5:
-      sprintf(dispStr,"CALibrAt"); ledDots=0b00000001; break; //Set temperature offset
-    }
-    break;
-  case 2:
-    switch (settings) {
-    case 0:
-      sprintf(dispStr,"CrockPot"); ledDots=0b00000000; break; // Cooking Time
-    case 1:
-      sprintf(dispStr,"PErcEnt "); ledDots=0b00000000; break; // Set Cooking Percent
-    }
-    break;
-  case 3:
-    switch (settings) {
-    case 0:
-      sprintf(dispStr,"DELAY St"); ledDots=0b00000001; break; // Delayed Start
-    case 1:
-      sprintf(dispStr,"PErcEnt "); ledDots=0b00000000; break; // Set Cooking Percent
-    }
-    break;
-  case 4:
-    switch (settings) {
-    case 0:
-      sprintf(dispStr,"DonEtEnP"); ledDots=0b00000000; break; // Cook to Temperature
-    case 1:
-      sprintf(dispStr,"PErcEnt "); ledDots=0b00000000; break; // Set Cooking Percent
-    case 2:
-      sprintf(dispStr,"CP Hi Lo"); ledDots=0b00000000; break; // Set Crockpot Knob Setting
-    }
-    break;
-  }
+	switch (mode) {
+	case 0:
+		switch (settings) {
+		case 0:
+			sprintf(dispStr,"tinEr   "); ledDots=0b00000000; break; //Elapsed Time
+		case 1:
+			sprintf(dispStr,"PErcEnt "); ledDots=0b00000000; break; // Set Cooking Percent
+		}
+		break;
+	case 1:
+		switch (settings) {
+		case 0:
+			sprintf(dispStr,"SOUSUIdE"); ledDots=0b00000000; break; //Sous Vide Mode
+		case 1:
+			sprintf(dispStr,"SU tinEr"); ledDots=0b11000000; break; //Elapsed Sous Vide Time
+		case 2:
+			sprintf(dispStr,"Proport "); ledDots=0b00000010; break; //Set Proportional Coefficient
+		case 3:
+			sprintf(dispStr,"IntEgrAL"); ledDots=0b00000000; break; //Set Integral Coefficient
+		case 4:
+			sprintf(dispStr,"dEriuAt "); ledDots=0b00000010; break; //Set Derivative Coefficient
+		case 5:
+			sprintf(dispStr,"CALibrAt"); ledDots=0b00000001; break; //Set temperature offset
+		}
+		break;
+	case 2:
+		switch (settings) {
+		case 0:
+			sprintf(dispStr,"CrockPot"); ledDots=0b00000000; break; // Cooking Time
+		case 1:
+			sprintf(dispStr,"PErcEnt "); ledDots=0b00000000; break; // Set Cooking Percent
+		}
+		break;
+	case 3:
+		switch (settings) {
+		case 0:
+			sprintf(dispStr,"DELAY St"); ledDots=0b00000001; break; // Delayed Start
+		case 1:
+			sprintf(dispStr,"PErcEnt "); ledDots=0b00000000; break; // Set Cooking Percent
+		}
+		break;
+	case 4:
+		switch (settings) {
+		case 0:
+			sprintf(dispStr,"DonEtEnP"); ledDots=0b00000000; break; // Cook to Temperature
+		case 1:
+			sprintf(dispStr,"PErcEnt "); ledDots=0b00000000; break; // Set Cooking Percent
+		case 2:
+			sprintf(dispStr,"CP Hi Lo"); ledDots=0b00000000; break; // Set Crockpot Knob Setting
+		}
+		break;
+	}
 }
 
 
 //Simple time-elapsed Mode with crockpot off.
 void doTimer(byte keys) {
-  myPID.SetMode(MANUAL); //Turn PID off
-  if(settings == 0) {
-    unsigned long now = millis();
-    unsigned long tTime = (now - tReset)/1000; //Get elapsed time in seconds
-    if(keys & 0b10010100) tReset = now; //reset if any time down or the Set button is pushed
-    if(keys == 0b00000010) onOff = 1; //Turn on crockpot if Temperature Up button is pushed
-    else if(keys == 0b00000001) onOff = 0; //Turn off crockpot if Temperature Down button is pushed
-    // Calculate hours, minutes, and seconds
-    int tSec = tTime % 60; 
-    int tMin = (tTime / 60) % 60;
-    int tHr = tTime / 3600;
-    if (onOff) { //Toggle output and display based on whether crockpot is on or off
-      sprintf(dispStr,"On%02hi%02hi%02hi\n",tHr,tMin,tSec); //Create output string
-      Output = WINDOW_SIZE * 10 * cpPercent;
-    } else {
-      sprintf(dispStr,"  %02hi%02hi%02hi\n",tHr,tMin,tSec); //Create output string
-      Output = 0;
-    }
-    ledDots = 0b00010100; //Set dots to separate hours, minutes, and seconds.
-  } else if (settings == 1) {
-    setPct(keys);
-  }
+	myPID.SetMode(MANUAL); //Turn PID off
+	if(settings == 0) {
+		unsigned long now = millis();
+		unsigned long tTime = (now - tReset)/1000; //Get elapsed time in seconds
+		if(keys & 0b10010100) tReset = now; //reset if any time down or the Set button is pushed
+		if(keys == 0b00000010) onOff = 1; //Turn on crockpot if Temperature Up button is pushed
+		else if(keys == 0b00000001) onOff = 0; //Turn off crockpot if Temperature Down button is pushed
+		// Calculate hours, minutes, and seconds
+		int tSec = tTime % 60; 
+		int tMin = (tTime / 60) % 60;
+		int tHr = tTime / 3600;
+		if (onOff) { //Toggle output and display based on whether crockpot is on or off
+			sprintf(dispStr,"On%02hi%02hi%02hi\n",tHr,tMin,tSec); //Create output string
+			Output = WINDOW_SIZE * 10 * cpPercent;
+		} else {
+			sprintf(dispStr,"  %02hi%02hi%02hi\n",tHr,tMin,tSec); //Create output string
+			Output = 0;
+		}
+		ledDots = 0b00010100; //Set dots to separate hours, minutes, and seconds.
+	} else if (settings == 1) {
+		setPct(keys);
+	}
 }
 
 //Sous Vide Mode
 void doSousVide(byte keys) {
-  //Read in current pid tunings
-  double p, i, d;
-  p = myPID.GetKp();
-  i = myPID.GetKi();
-  d = myPID.GetKd();
+	//Read in current pid tunings
+	double p, i, d;
+	p = myPID.GetKp();
+	i = myPID.GetKi();
+	d = myPID.GetKd();
 
-  switch (settings) {
-  case 0: //Temperature Display
-    sprintf(dispStr,"---*---*\n");
-    ledDots = 0b00000000;
-    
-    //Write new tOff to EEPROM if necessary
-    if (tOff != oldTOff) {
-      EEPROM.write(0,tOff);
-      oldTOff = tOff;
-      Serial.print(F("Updating EEPROM byte 0: ")); Serial.println(tOff);
-    }
-    break;
-  case 1:
-    setTimer(keys); break; //Timer
-  case 2:
-    p=setPro(keys, p); break; //Set Proportional Coefficient
-  case 3:
-    i=setInt(keys, i); break; //Set Integral Coefficient
-  case 4:
-    d=setDer(keys, d); break; //Set Derivative Coefficient
-  case 5:
-    tOff=setCal(keys, tOff); break; //Set temperature offset
-  }
+	switch (settings) {
+	case 0: //Temperature Display
+		sprintf(dispStr,"---*---*\n");
+		ledDots = 0b00000000;
+		
+		//Write new tOff to EEPROM if necessary
+		if (tOff != oldTOff) {
+			EEPROM.write(0,tOff);
+			oldTOff = tOff;
+			Serial.print(F("Updating EEPROM byte 0: ")); Serial.println(tOff);
+		}
+		break;
+	case 1:
+		setTimer(keys); break; //Timer
+	case 2:
+		p=setPro(keys, p); break; //Set Proportional Coefficient
+	case 3:
+		i=setInt(keys, i); break; //Set Integral Coefficient
+	case 4:
+		d=setDer(keys, d); break; //Set Derivative Coefficient
+	case 5:
+		tOff=setCal(keys, tOff); break; //Set temperature offset
+	}
 
-  if(settings>=2 && settings<=4) myPID.SetTunings(p, i, d); //Set tunings if in p, i, or d mode
+	if(settings>=2 && settings<=4) myPID.SetTunings(p, i, d); //Set tunings if in p, i, or d mode
 
-  if(isSensor && Input > 0) { // Is there a sensor and valid temperature data?
-    myPID.SetMode(AUTOMATIC); //Turn PID on once valid temperature data exists
-    if(settings == 0) setSousVide(keys); //Temperature Display
-  }
+	if(isSensor && Input > 0) { // Is there a sensor and valid temperature data?
+		myPID.SetMode(AUTOMATIC); //Turn PID on once valid temperature data exists
+		if(settings == 0) setSousVide(keys); //Temperature Display
+	}
 }
 
 
 // Countdown Timer
 void doCountdown(byte keys) {
-  myPID.SetMode(MANUAL); //Turn PID off
-  long tempTime = (long)millis();
-  long cMs = countDn - tempTime;
-  if (cMs < 0) cMs = 0;
+	myPID.SetMode(MANUAL); //Turn PID off
+	long tempTime = (long)millis();
+	long cMs = countDn - tempTime;
+	if (cMs < 0) cMs = 0;
 
-  long cHr = cMs / 3600000;
-  cMs -= (cHr * 3600000);
-  long cMin = cMs / 60000;
-  cMs -= (cMin * 60000);
-  long cSec = cMs / 1000;
-  cMs -= (cSec * 1000);
+	long cHr = cMs / 3600000;
+	cMs -= (cHr * 3600000);
+	long cMin = cMs / 60000;
+	cMs -= (cMin * 60000);
+	long cSec = cMs / 1000;
+	cMs -= (cSec * 1000);
 
-  if (settings == 0) {
-    switch (keys) {
-    case 0b00001000:
-      cHr = (cHr+1)%24; break; //Hour Up
-    case 0b00000100:
-      cHr = (cHr-1)%24; break; //Hour Down
-    case 0b00100000:
-      cMin = (cMin+1); break; //Min Up
-    case 0b00010000:
-      cMin = (cMin-1); break; //Min Down 
-    case 0b1000000:
-      highLow = (highLow == 'L') ? 'H' : 'L'; break; // Toggle High/Low settings
-    case 0b00000010:
-      highLow = 'H'; break;
-    case 0b00000001:
-      highLow = 'L'; break;
-    }
-    
-    sprintf(dispStr,"C%c%02hi%02hi%02hi\n",highLow,(int)cHr,(int)cMin,(int)cSec);
-    ledDots = 0b00010100;
-  } else if (settings == 1) {
-    setPct(keys);
-  }
+	if (settings == 0) {
+		switch (keys) {
+		case 0b00001000:
+			cHr = (cHr+1)%24; break; //Hour Up
+		case 0b00000100:
+			cHr = (cHr-1)%24; break; //Hour Down
+		case 0b00100000:
+			cMin = (cMin+1); break; //Min Up
+		case 0b00010000:
+			cMin = (cMin-1); break; //Min Down 
+		case 0b1000000:
+			highLow = (highLow == 'L') ? 'H' : 'L'; break; // Toggle High/Low settings
+		case 0b00000010:
+			highLow = 'H'; break;
+		case 0b00000001:
+			highLow = 'L'; break;
+		}
+		
+		sprintf(dispStr,"C%c%02hi%02hi%02hi\n",highLow,(int)cHr,(int)cMin,(int)cSec);
+		ledDots = 0b00010100;
+	} else if (settings == 1) {
+		setPct(keys);
+	}
 
-  cMs = (cHr*3600000)+(cMin*60000)+(cSec*1000)+cMs;
-  countDn = cMs + tempTime;
+	cMs = (cHr*3600000)+(cMin*60000)+(cSec*1000)+cMs;
+	countDn = cMs + tempTime;
 
-  if (cMs > 500) {
-    Output = WINDOW_SIZE * 10 * cpPercent;
-  } else {
-    if (highLow == 'L') Output = cpLowOutput * cpPercent;
-    else Output = cpHighOutput * cpPercent;
-  }
+	if (cMs > 500) {
+		Output = WINDOW_SIZE * 10 * cpPercent;
+	} else {
+		if (highLow == 'L') Output = cpLowOutput * cpPercent;
+		else Output = cpHighOutput * cpPercent;
+	}
 }
 
 // Delayed Start
 void doDelayStart(byte keys) {
-  myPID.SetMode(MANUAL); //Turn PID off
-  long tempTime = (long)millis();
-  long cMs = countDn - tempTime;
-  if (cMs < 0) cMs = 0;
+	myPID.SetMode(MANUAL); //Turn PID off
+	long tempTime = (long)millis();
+	long cMs = countDn - tempTime;
+	if (cMs < 0) cMs = 0;
 
-  long cHr = cMs / 3600000;
-  cMs -= (cHr * 3600000);
-  long cMin = cMs / 60000;
-  cMs -= (cMin * 60000);
-  long cSec = cMs / 1000;
-  cMs -= (cSec * 1000);
+	long cHr = cMs / 3600000;
+	cMs -= (cHr * 3600000);
+	long cMin = cMs / 60000;
+	cMs -= (cMin * 60000);
+	long cSec = cMs / 1000;
+	cMs -= (cSec * 1000);
 
-  if (settings == 0) {
-    switch (keys) {
-    case 0b00001000:
-      cHr = (cHr+1)%24; break; //Hour Up
-    case 0b00000100:
-      cHr = (cHr-1)%24; break; //Hour Down
-    case 0b00100000:
-      cMin = (cMin+1); break; //Min Up
-    case 0b00010000:
-      cMin = (cMin-1); break; //Min Down 
-    }
-    
-    sprintf(dispStr,"dL%02hi%02hi%02hi\n",(int)cHr,(int)cMin,(int)cSec);
-    ledDots = 0b00010100;
-  } else if (settings == 1) {
-    setPct(keys);
-  }
+	if (settings == 0) {
+		switch (keys) {
+		case 0b00001000:
+			cHr = (cHr+1)%24; break; //Hour Up
+		case 0b00000100:
+			cHr = (cHr-1)%24; break; //Hour Down
+		case 0b00100000:
+			cMin = (cMin+1); break; //Min Up
+		case 0b00010000:
+			cMin = (cMin-1); break; //Min Down 
+		}
+		
+		sprintf(dispStr,"dL%02hi%02hi%02hi\n",(int)cHr,(int)cMin,(int)cSec);
+		ledDots = 0b00010100;
+	} else if (settings == 1) {
+		setPct(keys);
+	}
 
-  cMs = (cHr*3600000)+(cMin*60000)+(cSec*1000)+cMs;
-  countDn = cMs + tempTime;
+	cMs = (cHr*3600000)+(cMin*60000)+(cSec*1000)+cMs;
+	countDn = cMs + tempTime;
 
-  if (cMs > 500) Output = 0;
-  else Output = WINDOW_SIZE * 10 * cpPercent;
+	if (cMs > 500) Output = 0;
+	else Output = WINDOW_SIZE * 10 * cpPercent;
 }
 
 
 void doDoneTemp(byte keys) {
-  myPID.SetMode(MANUAL); //Turn PID off
+	myPID.SetMode(MANUAL); //Turn PID off
 
-  if(settings == 0) { //Temperature Display
-    if (isSensor && Input > 0) { // Is there a sensor and valid temperature data?
-      if (Setpoint) {
-        if (keys == 0b00000010 && Setpoint <= 99) Setpoint=((int)Setpoint)+1;
-        else if (keys == 0b00000001 && Setpoint >= 10) Setpoint=((int)Setpoint)-1;
-      } else if (keys & 0b00000011) { //Setpoint is 0 and Up or Down pressed
-        Setpoint = (int)(INITIAL_SET_POINT+0.5);
-      }
-      
-      if (Setpoint) {
-        sprintf(dispStr,"%c%02d*%03d*\n",highLow,(int)((Setpoint)+0.5),(int)((Input*10)+0.5));
-        ledDots = 0b00000100; //Set decimal points in temperatures
-      } else {
-        sprintf(dispStr,"%c--*%03d*\n",highLow,(int)((Input*10)+0.5));
-        ledDots = 0b00000100; //Set decimal points in temperatures
-      }
-    } else {
-      sprintf(dispStr,"%c--*---*\n",highLow);
-      ledDots = 0b00000000;
-    }
-  } else if (settings == 1) {
-    setPct(keys);
-  } else if (settings == 2) {
-    setHighLow(keys);
-  }
+	if(settings == 0) { //Temperature Display
+		if (isSensor && Input > 0) { // Is there a sensor and valid temperature data?
+			if (Setpoint) {
+				if (keys == 0b00000010 && Setpoint <= 99) Setpoint=((int)Setpoint)+1;
+				else if (keys == 0b00000001 && Setpoint >= 10) Setpoint=((int)Setpoint)-1;
+			} else if (keys & 0b00000011) { //Setpoint is 0 and Up or Down pressed
+				Setpoint = (int)(INITIAL_SET_POINT+0.5);
+			}
+			
+			if (Setpoint) {
+				sprintf(dispStr,"%c%02d*%03d*\n",highLow,(int)((Setpoint)+0.5),(int)((Input*10)+0.5));
+				ledDots = 0b00000100; //Set decimal points in temperatures
+			} else {
+				sprintf(dispStr,"%c--*%03d*\n",highLow,(int)((Input*10)+0.5));
+				ledDots = 0b00000100; //Set decimal points in temperatures
+			}
+		} else {
+			sprintf(dispStr,"%c--*---*\n",highLow);
+			ledDots = 0b00000000;
+		}
+	} else if (settings == 1) {
+		setPct(keys);
+	} else if (settings == 2) {
+		setHighLow(keys);
+	}
 
-  if (Input >= Setpoint) Setpoint = 0;
+	if (Input >= Setpoint) Setpoint = 0;
 
-  if (Setpoint) {
-    Output = WINDOW_SIZE * 10 * cpPercent;
-  } else {
-    if (highLow == 'L') Output = cpLowOutput * cpPercent;
-    else Output = cpHighOutput * cpPercent;
-  }
+	if (Setpoint) {
+		Output = WINDOW_SIZE * 10 * cpPercent;
+	} else {
+		if (highLow == 'L') Output = cpLowOutput * cpPercent;
+		else Output = cpHighOutput * cpPercent;
+	}
 }
 /********************************************
 *               Settings Modes              *
 ********************************************/
 
 void setSousVide(byte keys) { //Temperature Display
-  /*
-  // display Fahrenheit formatted temperatures
-  sprintf(dispStr,"%3hi%3hi\n",(int)(sensors.toFahrenheit(Setpoint)*10),(int)(sensors.toFahrenheit(Input)*10));
-  */  
-  // display Celsius formatted temperatures
-  sprintf(dispStr,"%03d*%03d*\n",(int)((Setpoint*10)+0.5),(int)((Input*10)+0.5));
-  ledDots = 0b01000100; //Set decimal points in temperatures
+	/*
+// display Fahrenheit formatted temperatures
+sprintf(dispStr,"%3hi%3hi\n",(int)(sensors.toFahrenheit(Setpoint)*10),(int)(sensors.toFahrenheit(Input)*10));
+*/  
+	// display Celsius formatted temperatures
+	sprintf(dispStr,"%03d*%03d*\n",(int)((Setpoint*10)+0.5),(int)((Input*10)+0.5));
+	ledDots = 0b01000100; //Set decimal points in temperatures
 
-  //Process Buttons
-  if ((keys == 0b00000010) && (Setpoint <= 99)) Setpoint=Setpoint+0.5; //Setpoint Up
-  else if ((keys == 0b00000001) && (Setpoint >= 10.0)) Setpoint=Setpoint-0.5; //Setpoint Down
+	//Process Buttons
+	// Setpoint up or down
+	if ((keys == 0b00000010) && (Setpoint <= 99)) Setpoint=Setpoint+0.5;
+	else if ((keys == 0b00000001) && (Setpoint >= 10.0)) Setpoint=Setpoint-0.5;
 }
 
 void setTimer(byte keys) { //Timer
-  unsigned long tTime = (millis() - tReset)/1000;
-  if(keys & 0b00010100) tReset = millis(); //reset if any time down buttons are pushed
-  int tSec = tTime % 60;
-  int tMin = (tTime / 60) % 60;
-  int tHr = tTime / 3600;
-  sprintf(dispStr,"t %02hi%02hi%02hi\n",tHr,tMin,tSec);
-  ledDots = 0b10010100; //Set dots to separate hours, minutes, and seconds.
+	unsigned long tTime = (millis() - tReset)/1000;
+	if(keys & 0b00010100) tReset = millis(); //reset if time dn buttons pushed
+	int tSec = tTime % 60;
+	int tMin = (tTime / 60) % 60;
+	int tHr = tTime / 3600;
+	sprintf(dispStr,"t %02hi%02hi%02hi\n",tHr,tMin,tSec);
+	ledDots = 0b10010100; //Set dots to separate hours, minutes, and seconds.
 }
 
 double setPro(byte keys, double p) { //Set Proportional Coefficient
-  sprintf(dispStr,"Pro %4hi\n",(int)p);
-  ledDots = 0b00100000;
-  //Process Buttons
-  if ((keys == 0b00000010) && (p  < 9900)) p+=100; //Increase coefficient
-  else if ((keys == 0b00000001) && (p >= 100)) p-=100; //Decrease coefficient
-  return p;
+	sprintf(dispStr,"Pro %4hi\n",(int)p);
+	ledDots = 0b00100000;
+	//Process Buttons
+	if ((keys == 0b00000010) && (p  < 9900)) p+=100; //Increase coeff.
+	else if ((keys == 0b00000001) && (p >= 100)) p-=100; //Decrease coeff.
+	return p;
 }
 
 double setInt(byte keys, double i) { //Set Integral Coefficient
-  sprintf(dispStr,"Int %4hi\n",(int)((i*100)+0.5)); 
-  ledDots = 0b00100100;
-  //Process Buttons
-  if ((keys == 0b00000010) && (i  < 99.95)) i+=0.05; //Increase coefficient
-  else if ((keys == 0b00000001) && (i >= 0.05)) i-=0.05; //Decrease coefficient
-  return i;
+	sprintf(dispStr,"Int %4hi\n",(int)((i*100)+0.5)); 
+	ledDots = 0b00100100;
+	//Process Buttons
+	if ((keys == 0b00000010) && (i  < 99.95)) i+=0.05; //Increase coeff.
+	else if ((keys == 0b00000001) && (i >= 0.05)) i-=0.05; //Decrease coeff.
+	return i;
 }
 
 double setDer(byte keys, double d) { //Set Derivative Coefficient
-  sprintf(dispStr,"dEr %4hi\n",(int)d);
-  ledDots = 0b00100000;
-  //Process Buttons
-  if ((keys == 0b00000010) && (d  < 9999)) d++; //Increase coefficient
-  else if ((keys == 0b00000001) && (d >= 1)) d--; //Decrease coefficient
-  return d;
+	sprintf(dispStr,"dEr %4hi\n",(int)d);
+	ledDots = 0b00100000;
+	//Process Buttons
+	if ((keys == 0b00000010) && (d  < 9999)) d++; //Increase coefficient
+	else if ((keys == 0b00000001) && (d >= 1)) d--; //Decrease coefficient
+	return d;
 }
 
 double setCal(byte keys, byte cal) { //Set temp sensor calibration
-  sprintf(dispStr,"CAL  %+03hi\n", (int)cal-127);
-  ledDots = 0b00100010;
-  //Process Buttons
-  if ((keys == 0b00000010) && (cal < 226)) cal+=1; //Increase temp offset
-  else if ((keys == 0b00000001) && (cal > 28)) cal-=1; //Decrease temp offset
-  return cal;
+	sprintf(dispStr,"CAL  %+03hi\n", (int)cal-127);
+	ledDots = 0b00100010;
+	//Process Buttons
+	if ((keys == 0b00000010) && (cal < 226)) cal+=1; //Increase temp offset
+	else if ((keys == 0b00000001) && (cal > 28)) cal-=1; //Decrease temp offset
+	return cal;
 }
 
 void setPct(byte keys) { //Set Cooking Percent
-  sprintf(dispStr,"Pct  %3hi\n",cpPercent);
-  ledDots = 0b00100000;
-  //Process Buttons
-  if ((keys == 0b00000010) && (cpPercent <= 95)) cpPercent+=5; //Increase coefficient
-  else if ((keys == 0b00000001) && (cpPercent >= 10)) cpPercent-=5; //Decrease coefficient
+	sprintf(dispStr,"Pct  %3hi\n",cpPercent);
+	ledDots = 0b00100000;
+	//Process Buttons
+	if ((keys == 0b00000010)&&(cpPercent <= 95)) cpPercent+=5; //Increase
+	else if ((keys == 0b00000001)&&(cpPercent >= 10)) cpPercent-=5; //Decrease
 }
 
-void setHighLow (byte keys) { //Set hold temperature for Crockpot Knob on high or low
-    ledDots = 0b00000000;
-    if (highLow == 'H') strcpy(dispStr,"CP on Hi");
-    else if (highLow == 'L') strcpy(dispStr,"CP on Lo");
-    
-    if (keys == 0b00000010) highLow = 'H';
-    else if (keys == 0b00000001) highLow = 'L';
+void setHighLow (byte keys) { //Set hold temp for Crockpot Knob on high or low
+	ledDots = 0b00000000;
+	if (highLow == 'H') strcpy(dispStr,"CP on Hi");
+	else if (highLow == 'L') strcpy(dispStr,"CP on Lo");
+	
+	if (keys == 0b00000010) highLow = 'H';
+	else if (keys == 0b00000001) highLow = 'L';
 }
-/********************************************
-* Serial Communication functions / helpers *
-********************************************/
+/**********************************************
+*  Serial Communication functions / helpers   *
+**********************************************/
 
-union {         // This Data structure lets
-  byte asBytes[24]; // us take the byte array
-  float asFloat[6]; // sent from processing and
-}           // easily convert it to a
-foo;          // float array
+union {               // This Data structure lets
+	byte asBytes[24]; // us take the byte array
+	float asFloat[6]; // sent from processing and
+}                     // easily convert it to a
+foo;                  // float array
 
 //  the bytes coming from the arduino follow the following
 //  format:
@@ -838,74 +839,79 @@ foo;          // float array
 //  14-17: float P_Param
 //  18-21: float I_Param
 //  22-245: float D_Param
+
 void SerialReceive()
 {
 
-  // read the bytes sent from Processing
-  int index=0;
-  byte Auto_Man = -1;
-  byte Direct_Reverse = -1;
-  while(Serial.available()&&index<26)
-  {
-    if(index == 0) Auto_Man = Serial.read();
-    else if(index == 1) Direct_Reverse = Serial.read();
-    else foo.asBytes[index-2] = Serial.read();
-    index++;
-  } 
+	// read the bytes sent from Processing
+	int index=0;
+	byte Auto_Man = -1;
+	byte Direct_Reverse = -1;
+	while(Serial.available()&&index<26)
+	{
+		if(index == 0) Auto_Man = Serial.read();
+		else if(index == 1) Direct_Reverse = Serial.read();
+		else foo.asBytes[index-2] = Serial.read();
+		index++;
+	} 
 
-  // if the information we got was in the correct format, 
-  // read it into the system
-  if(index == 26  && (Auto_Man == 0 || Auto_Man == 1)&& (Direct_Reverse == 0 || Direct_Reverse == 1))
-  {
-    Setpoint=double(foo.asFloat[0]);
-    //Input=double(foo.asFloat[1]);       // * the user has the ability to send the 
-    // value of "Input". In most cases (as 
-    // in this one) this is not needed.
-    
-    if(Auto_Man == 0)         // * only change the output if we are in 
-    {                 // manual mode. otherwise we'll get an
-      Output=double(foo.asFloat[2]);  // output blip, then the controller will 
-    }                 // overwrite.
-    
-    double p, i, d;           // * read in and set the controller tunings
-    p = double(foo.asFloat[3]);     //
-    i = double(foo.asFloat[4]);     //
-    d = double(foo.asFloat[5]);     //
-    myPID.SetTunings(p, i, d);      //
-    
-    if(Auto_Man == 0) myPID.SetMode(MANUAL);            // * set the controller mode
-    else myPID.SetMode(AUTOMATIC);                  //
-    
-    if(Direct_Reverse == 0) myPID.SetControllerDirection(DIRECT); // * set the controller Direction
-    else myPID.SetControllerDirection(REVERSE);           //
-  }
-  Serial.flush();                           // * clear any random data from the serial buffer
+	// if the information we got was in the correct format, 
+	// read it into the system
+	if(index == 26  && (Auto_Man == 0 || Auto_Man == 1)
+	&& (Direct_Reverse == 0 || Direct_Reverse == 1))
+	{
+		Setpoint=double(foo.asFloat[0]);
+		//Input=double(foo.asFloat[1]);  // * the user has the ability to send the 
+		                                 // value of "Input". In most cases (as
+		                                 // in this one) this is not needed.
+		
+		if(Auto_Man == 0)                  // * only change the output if we
+		{                                  // are in manual mode. Otherwise
+			Output=double(foo.asFloat[2]); // we'll get an output blip, then
+		}                                  // the controller will overwrite.
+		
+		double p, i, d;             // * read in and set the controller tunings
+		p = double(foo.asFloat[3]); //
+		i = double(foo.asFloat[4]); //
+		d = double(foo.asFloat[5]); //
+		myPID.SetTunings(p, i, d);  //
+		
+		if(Auto_Man == 0) myPID.SetMode(MANUAL);   // * set the controller mode
+		else myPID.SetMode(AUTOMATIC);             //
+		
+		if(Direct_Reverse == 0) {                  // * set the controller
+			myPID.SetControllerDirection(DIRECT);  // direction
+		} else {                                   //
+			myPID.SetControllerDirection(REVERSE); //
+		}
+	}
+	Serial.flush();           // * clear any random data from the serial buffer
 }
 
 void SerialSend()
 {
-  Serial.print(F("PID "));
-  Serial.print(Setpoint);  
-  SerialSpace();
-  Serial.print(Input);   
-  SerialSpace();
-  Serial.print(Output);  
-  SerialSpace();
-  Serial.print(myPID.GetKp());   
-  SerialSpace();
-  Serial.print(myPID.GetKi());   
-  SerialSpace();
-  Serial.print(myPID.GetKd());   
-  SerialSpace();
-  if(myPID.GetMode() == AUTOMATIC) Serial.print(F("Automatic "));
-  else Serial.print(F("Manual ")); 
-  if(myPID.GetDirection() == DIRECT) Serial.println(F("Direct"));
-  else Serial.println(F("Reverse"));
+	Serial.print(F("PID "));
+	Serial.print(Setpoint);  
+	SerialSpace();
+	Serial.print(Input);   
+	SerialSpace();
+	Serial.print(Output);  
+	SerialSpace();
+	Serial.print(myPID.GetKp());   
+	SerialSpace();
+	Serial.print(myPID.GetKi());   
+	SerialSpace();
+	Serial.print(myPID.GetKd());   
+	SerialSpace();
+	if(myPID.GetMode() == AUTOMATIC) Serial.print(F("Automatic "));
+	else Serial.print(F("Manual ")); 
+	if(myPID.GetDirection() == DIRECT) Serial.println(F("Direct"));
+	else Serial.println(F("Reverse"));
 }
 
 inline void SerialSpace()
 {
-  Serial.print(" ");
+	Serial.print(" ");
 }
 
 /*
