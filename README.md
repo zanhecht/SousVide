@@ -220,12 +220,12 @@ CHANGELOG
 ---------
 
 * 0.7 First Public Release
-** 0.7.1 Fixed typo in instructions
-** 0.7.2 Simplified code to output to LED bar
+  * 0.7.1 Fixed typo in instructions
+  * 0.7.2 Simplified code to output to LED bar
 * 0.8 Change to use Celsius internally, fixed temp sensor polling, added moving average for temperature, added "aggressive mode"  
-** 0.8.1 Split code into functions. Skip sous vide mode if temperature sensor is missing. Tweaked aggressive mode.
-** 0.8.2 Formatted instructions with Markdown
-** 0.8.3 Bug Fixes
-** 0.8.4 Changed aggressive mode I parameter to 0 to reduce overshoot.
+  * 0.8.1 Split code into functions. Skip sous vide mode if temperature sensor is missing. Tweaked aggressive mode.
+  * 0.8.2 Formatted instructions with Markdown
+  * 0.8.3 Bug Fixes
+  * 0.8.4 Changed aggressive mode I parameter to 0 to reduce overshoot.
 * 0.9 Add mode labels, delayed start, and calibration
 * 1.0 Optimize code. Add cooking percentage and cook until done temp mode.
