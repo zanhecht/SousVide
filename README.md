@@ -4,10 +4,11 @@ Zan Hecht - 11 Dec 2016
 http://zansstuff.com/sous-vide
 
 The following Arduino libraries are required to compile:
-* TM1638.h: http://code.google.com/p/tm1638-library/
-* OneWire.h: http://www.pjrc.com/teensy/td_libs_OneWire.html
-* DallasTemperature.h: http://milesburton.com/Dallas_Temperature_Control_Library
-* PID_v1.h: http://www.arduino.cc/playground/Code/PIDLibrary
+* TM1638.h: https://github.com/rjbatista/tm1638-library
+* OneWire.h: https://github.com/PaulStoffregen/OneWire
+* DallasTemperature.h: https://github.com/milesburton/Arduino-Temperature-Control-Library
+* PID_v1.h: https://github.com/br3ttb/Arduino-PID-Library/
+
 
 Concept and original code inspired by the article "Turn your crock pot into a
 PID controlled sous vide cooker for $25" by andy@chiefmarley.com at
