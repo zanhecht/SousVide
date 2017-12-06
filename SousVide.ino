@@ -1,7 +1,7 @@
 /*
 ARDUINO SOUS VIDE AND CROCKPOT CONTROLLER v1.0.1
 ================================================
-Zan Hecht - 11 Dec 2016
+Zan Hecht - 6 Dec 2017
 http://zansstuff.com/sous-vide */
 
 #define VER_1 1
@@ -920,7 +920,7 @@ inline void SerialSpace()
 Copyright
 ---------
 
-### COPYRIGHT 2012-2016 ZAN HECHT
+### COPYRIGHT 2012-2017 ZAN HECHT
 
 ARDUINO CROCKPOT SOUS VIDE AND TIMER is licensed under a Creative-
 Commons Attribution Share-Alike License.
