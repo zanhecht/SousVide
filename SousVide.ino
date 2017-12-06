@@ -1,12 +1,12 @@
 /*
-ARDUINO SOUS VIDE AND CROCKPOT CONTROLLER v1.0.0
+ARDUINO SOUS VIDE AND CROCKPOT CONTROLLER v1.0.1
 ================================================
 Zan Hecht - 11 Dec 2016
 http://zansstuff.com/sous-vide */
 
 #define VER_1 1
 #define VER_2 0
-#define VER_3 0
+#define VER_3 1
 
 /*The following Arduino libraries are required to compile:
 * TM1638.h: https://github.com/rjbatista/tm1638-library
@@ -109,7 +109,8 @@ Hit "MODE" to switch between modes. Modes are described below:
 > measured on my crock-pot, WARM is approximately 30% of the crock-pot's HIGH
 > setting and 40% of the crock-pot's LOW setting. There is no need to start or
 > stop the timer -- it is always running. The first two letters displayed
-> indicate whether the Crockpot's knob is set to High ("CL") or Low ("CL").
+> indicate whether the keep warm mode is calibrated for the Crockpot's knob
+> being set to High ("CH") or to Low ("CL").
 >   
 > **IMPORTANT: YOU MUST SPECIFY WHETHER THE CROCKPOT'S KNOB IS SET TO HIGH**
 > **("CH") OR LOW ("CL") OR THE KEEP WARM MODE MAY NOT KEEP YOUR FOOD HOT**
@@ -127,7 +128,7 @@ Hit "MODE" to switch between modes. Modes are described below:
 > > Scale the crockpot cooking power by the specified percentage. Use TEMP UP
 > > and TEMP DOWN to adjust the percentage up or down by 5%.
 
-### DELAYED START ("DELAY St.")
+### DELAYED START ("DonEtEnP")
 > Turns the crockpot on to power specified in Percent setting after the time
 > runs out. There is no need to start or stop the timer -- it is always running.
 > Once the time elapses, the Crockpot will stay on until more time is added, the
@@ -970,4 +971,5 @@ CHANGELOG
   * 0.8.4 Changed aggressive mode I parameter to 0 to reduce overshoot.
 * 0.9 Add mode labels, delayed start, and calibration
 * 1.0 Optimize code. Add cooking percentage and cook until done temp mode.
+  * 1.0.1 Fix typos in instructions. No changes to code.
 */
