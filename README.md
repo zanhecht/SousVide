@@ -1,13 +1,9 @@
 ARDUINO SOUS VIDE AND CROCKPOT CONTROLLER v1.0.1
 ================================================
 Zan Hecht - 6 Dec 2017
-http://zansstuff.com/sous-vide */
+http://zansstuff.com/sous-vide
 
-#define VER_1 1
-#define VER_2 0
-#define VER_3 1
-
-/*The following Arduino libraries are required to compile:
+The following Arduino libraries are required to compile:
 * TM1638.h: https://github.com/rjbatista/tm1638-library
 * OneWire.h: https://github.com/PaulStoffregen/OneWire
 * DallasTemperature.h: https://github.com/milesburton/Arduino-Temperature-Control-Library
