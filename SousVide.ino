@@ -465,7 +465,7 @@ void loop() {
 	}
 
 	//write to display
-	//Serial.println(dispStr);
+	//if(SERIAL_ENABLE) {Serial.println(dispStr);}
 	module.setDisplayToString(dispStr,ledDots);
 	module.setLEDs(outToLed);
 
@@ -982,5 +982,5 @@ CHANGELOG
   * 0.8.4 Changed aggressive mode I parameter to 0 to reduce overshoot.
 * 0.9 Add mode labels, delayed start, and calibration
 * 1.0 Optimize code. Add cooking percentage and cook until done temp mode.
-  * 1.0.1 Fix typos in instructions. No changes to code.
+  * 1.0.1 Fix typos in instructions, optimize code for when SERIAL_ENABLE is set to 0.
 */
