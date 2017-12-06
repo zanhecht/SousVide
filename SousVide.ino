@@ -285,13 +285,14 @@ byte tOff, oldTOff; //Temperature Calibration Offset
 **********************************************/
 
 void setup() {
-	// start serial port
-	Serial.begin(9600); 
-	Serial.println(F("ARDUINO SOUS VIDE AND CROCKPOT CONTROLLER"));
-	Serial.print(F("              VERSION "));
-	Serial.print(VER_1); Serial.print(F("."));
-	Serial.print(VER_2); Serial.print(F("."));
-	Serial.print(VER_3); Serial.println(F("              \n"));
+	if(SERIAL_ENABLE) { // start serial port
+		Serial.begin(9600); 
+		Serial.println(F("ARDUINO SOUS VIDE AND CROCKPOT CONTROLLER"));
+		Serial.print(F("              VERSION "));
+		Serial.print(VER_1); Serial.print(F("."));
+		Serial.print(VER_2); Serial.print(F("."));
+		Serial.print(VER_3); Serial.println(F("              \n"));
+	}
 
 	//Read from and initialize (if necessary) EEPROM
 	tOff = EEPROM.read(0);
@@ -303,31 +304,35 @@ void setup() {
 	//Byte 42 should be set to 42.
 	if((tOff != 255) && (EEPROM.read(1) == VER_1)
 			&& (EEPROM.read(2) == VER_2) && (EEPROM.read(42) == 42)) {
-		Serial.print(F("EEPROM Signature Check OK: "));
-		Serial.print(tOff);
-		SerialSpace();
-		Serial.print(EEPROM.read(1));
-		SerialSpace();
-		Serial.print(EEPROM.read(2));
-		SerialSpace();
-		Serial.println(EEPROM.read(42));
+		if(SERIAL_ENABLE) {
+			Serial.print(F("EEPROM Signature Check OK: "));
+			Serial.print(tOff);
+			SerialSpace();
+			Serial.print(EEPROM.read(1));
+			SerialSpace();
+			Serial.print(EEPROM.read(2));
+			SerialSpace();
+			Serial.println(EEPROM.read(42));
+		}
 	} else {
-		Serial.print(F("EEPROM Signature Check FAILED: "));
-		Serial.print(tOff);
-		SerialSpace();
-		Serial.print(EEPROM.read(1));
-		SerialSpace();
-		Serial.print(EEPROM.read(2));
-		SerialSpace();
-		Serial.println(EEPROM.read(42));
-		Serial.print(F("Writing to EEPROM... "));
+		if(SERIAL_ENABLE) {
+			Serial.print(F("EEPROM Signature Check FAILED: "));
+			Serial.print(tOff);
+			SerialSpace();
+			Serial.print(EEPROM.read(1));
+			SerialSpace();
+			Serial.print(EEPROM.read(2));
+			SerialSpace();
+			Serial.println(EEPROM.read(42));
+			Serial.print(F("Writing to EEPROM... "));
+		}
 		tOff=127;
 		oldTOff=tOff;
 		EEPROM.write(0,tOff);
 		EEPROM.write(1,VER_1);
 		EEPROM.write(2,VER_2);
 		EEPROM.write(42,42);
-		Serial.println(F("DONE"));
+		if(SERIAL_ENABLE) {Serial.println(F("DONE"));}
 	}
 
 
@@ -335,17 +340,20 @@ void setup() {
 	//Initialize PWM Timer
 	windowStartTime = millis();
 
-	Serial.println(F("Initializing Temperature Sensor..."));
+	if(SERIAL_ENABLE) {Serial.println(F("Initializing Temperature Sensor..."));}
 	//Start Dallas Library and initialize temp sensor
 	sensors.begin();
 	isSensor = sensors.getAddress(tempDeviceAddress, 0);
 	sensors.setWaitForConversion(false);  // async mode 
 	if(isSensor) {
-		Serial.print(F("Temperature Sensor Found: ")); Serial.println(tempDeviceAddress[0]);
+		if(SERIAL_ENABLE) {
+			Serial.print(F("Temperature Sensor Found: "));
+			Serial.println(tempDeviceAddress[0]);
+		}
 		sensors.setResolution(tempDeviceAddress, SENSOR_RESOLUTION);
 		sensors.requestTemperatures();  // Send the command to get temperatures
-	} else {
-		Serial.println(F("No Temperature Sensor Found"));  
+	} else if(SERIAL_ENABLE) {
+		Serial.println(F("No Temperature Sensor Found"));
 	}
 	tempTime = millis()+TEMP_TIME; // Set the timer to retrieve temps
 
@@ -360,7 +368,7 @@ void setup() {
 	digitalWrite(TRIGGER_PIN, LOW);   // sets the relay off
 	pinMode(TRIGGER_PIN, OUTPUT);
 
-	Serial.println(F("Controller Ready\n"));
+	if(SERIAL_ENABLE) {Serial.println(F("Controller Ready\n"));}
 	delay(5);
 }
 
@@ -589,7 +597,10 @@ void doSousVide(byte keys) {
 		if (tOff != oldTOff) {
 			EEPROM.write(0,tOff);
 			oldTOff = tOff;
-			Serial.print(F("Updating EEPROM byte 0: ")); Serial.println(tOff);
+			if(SERIAL_ENABLE) {
+				Serial.print(F("Updating EEPROM byte 0: "));
+				Serial.println(tOff);
+			}
 		}
 		break;
 	case 1:
