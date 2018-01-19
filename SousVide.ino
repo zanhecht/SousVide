@@ -128,7 +128,7 @@ Hit "MODE" to switch between modes. Modes are described below:
 > > Scale the crockpot cooking power by the specified percentage. Use TEMP UP
 > > and TEMP DOWN to adjust the percentage up or down by 5%.
 
-### DELAYED START ("DonEtEnP")
+### DELAYED START ("DELAY St.")
 > Turns the crockpot on to power specified in Percent setting after the time
 > runs out. There is no need to start or stop the timer -- it is always running.
 > Once the time elapses, the Crockpot will stay on until more time is added, the
@@ -149,7 +149,7 @@ Hit "MODE" to switch between modes. Modes are described below:
 > > Scale the crockpot cooking power by the specified percentage. Use TEMP UP
 > > and TEMP DOWN to adjust the percentage up or down by 5%.
 
-### COOK TO TEMPERATURE ("DELAY St.")
+### COOK TO TEMPERATURE ("DonEtEnP")
 > Turns the crockpot on to power specified in Percent setting until target
 > temperature is reached. Once target temperature is reached, turn the crockpot
 > to warm mode. 
