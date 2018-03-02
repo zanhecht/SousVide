@@ -15,7 +15,7 @@ PID controlled sous vide cooker for $25" by andy@chiefmarley.com at
 http://chiefmarley.com/Arduino/?p=3
 
 PID settings for coffee urn and "aggressive mode" taken from the Ember source
-code from Lower East Kitchen http://lowereastkitchen.com/wp/software/
+code from Lower East Kitchen https://github.com/abefetterman/Ember-Kit
 
 Temperature input via Dallas DS18B20 One-Wire temperature sensor. Datasheet at
 http://www.maxim-ic.com/datasheet/index.mvp/id/2812
